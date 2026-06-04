@@ -50,22 +50,25 @@ CREATE TABLE IF NOT EXISTS  Asistencias (
     FOREIGN KEY (dni_alumno) REFERENCES Alumnos(dni) ON DELETE CASCADE
 ) PARTITION BY RANGE (fecha);
 
--- 1er Año del alumno (Histórico)
+-- Particiones por año calendario de la fecha de asistencia
 CREATE TABLE IF NOT EXISTS Asistencias_2022 PARTITION OF Asistencias
     FOR VALUES FROM ('2022-01-01') TO ('2023-01-01');
 
--- 2do Año del alumno (Histórico)
+-- Año calendario 2023
 CREATE TABLE IF NOT EXISTS Asistencias_2023 PARTITION OF Asistencias
     FOR VALUES FROM ('2023-01-01') TO ('2024-01-01');
 
--- 3er Año del alumno (Histórico)
+-- Año calendario 2024
 CREATE TABLE IF NOT EXISTS  Asistencias_2024 PARTITION OF Asistencias
     FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
 
--- 4to Año del alumno (Histórico)
+-- Año calendario 2025
 CREATE TABLE IF NOT EXISTS  Asistencias_2025 PARTITION OF Asistencias
     FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
 
--- 5to Año del alumno (Año actual cursando)
+-- Año calendario 2026
 CREATE TABLE IF NOT EXISTS  Asistencias_2026 PARTITION OF Asistencias
     FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
+
+-- Partición de respaldo para fechas fuera de los rangos anteriores
+CREATE TABLE IF NOT EXISTS Asistencias_default PARTITION OF Asistencias DEFAULT;
