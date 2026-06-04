@@ -19,29 +19,33 @@ BEGIN
     PERFORM pg_advisory_xact_lock(p_dni_alumno);
 
     -- Determinar/validar el turno de la fichada
-    IF p_id_turno IS NULL THEN
-        -- derivar turno desde la inscripción más reciente del ciclo actual
-        SELECT c.id_turno INTO v_id_turno
-        FROM inscripciones i
-        JOIN cursos c ON i.id_curso = c.id_curso
-        WHERE i.dni_alumno = p_dni_alumno
-        AND i.ciclo_lectivo = EXTRACT(YEAR FROM v_fecha)::INT
-        ORDER BY i.id_inscripcion DESC
-        LIMIT 1;
+        IF p_id_turno IS NULL THEN
+                -- derivar turno desde la inscripción más reciente del ciclo actual
+                -- preferimos la relación directa por id_curso_turno (curso en turno),
+                -- si no existe, caemos al id_turno vinculado desde cursos (compatibilidad)
+                SELECT COALESCE(ct.id_turno, c.id_turno) INTO v_id_turno
+                FROM inscripciones i
+                LEFT JOIN curso_turnos ct ON i.id_curso_turno = ct.id_curso_turno
+                LEFT JOIN cursos c ON i.id_curso = c.id_curso
+                WHERE i.dni_alumno = p_dni_alumno
+                    AND i.ciclo_lectivo = EXTRACT(YEAR FROM v_fecha)::INT
+                ORDER BY i.id_inscripcion DESC
+                LIMIT 1;
 
-        IF NOT FOUND THEN
-            RETURN 'ERROR_NO_INSCRIPCION';
-        END IF;
-    ELSE
+                IF NOT FOUND OR v_id_turno IS NULL THEN
+                        RETURN 'ERROR_NO_INSCRIPCION';
+                END IF;
+        ELSE
         v_id_turno := p_id_turno;
         -- validar coherencia: que exista una inscripción en ese turno para el ciclo
-        PERFORM 1
-        FROM inscripciones i
-        JOIN cursos c ON i.id_curso = c.id_curso
-        WHERE i.dni_alumno = p_dni_alumno
-        AND i.ciclo_lectivo = EXTRACT(YEAR FROM v_fecha)::INT
-        AND c.id_turno = v_id_turno
-        LIMIT 1;
+                PERFORM 1
+                FROM inscripciones i
+                LEFT JOIN curso_turnos ct ON i.id_curso_turno = ct.id_curso_turno
+                LEFT JOIN cursos c ON i.id_curso = c.id_curso
+                WHERE i.dni_alumno = p_dni_alumno
+                    AND i.ciclo_lectivo = EXTRACT(YEAR FROM v_fecha)::INT
+                    AND (ct.id_turno = v_id_turno OR c.id_turno = v_id_turno)
+                LIMIT 1;
 
         IF NOT FOUND THEN
             RETURN 'ERROR_TURNO_MISMATCH';
@@ -68,7 +72,7 @@ BEGIN
     -- Si existe registro y no tiene hora_salida -> evaluar salida
     IF v_hora_salida IS NULL THEN
         v_ts_entrada := v_fecha + v_hora_entrada;
-        IF v_now - v_ts_entrada < INTERVAL '5 minutes' THEN
+        IF v_now - v_ts_entrada < INTERVAL '30 seconds' THEN
             RETURN 'IGNORED_ANTIRREBOTE';
         END IF;
 
