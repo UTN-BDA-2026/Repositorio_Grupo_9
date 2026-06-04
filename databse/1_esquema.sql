@@ -1,5 +1,5 @@
 --1. Tabla PARAMÉTRICA: Turnos
-CREATE TABLE Turnos (
+CREATE TABLE IF NOT EXISTS Turnos (
     id_turno SERIAL PRIMARY KEY,
     descripcion VARCHAR(50) NOT NULL,
     hora_inicio TIME NOT NULL,
@@ -7,7 +7,7 @@ CREATE TABLE Turnos (
 );
 
 --2. Tabla Paramétrica: Cursos
-CREATE TABLE Cursos (
+CREATE TABLE IF NOT EXISTS  Cursos (
     id_curso SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL, --Ej: '3ro A'
     id_turno INT NOT NULL,
@@ -15,7 +15,7 @@ CREATE TABLE Cursos (
 );
 
 --3. Tabla Principal: Alumnos
-CREATE TABLE Alumnos (
+CREATE TABLE IF NOT EXISTS  Alumnos (
     dni SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL,
     apellido VARCHAR(50) NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE Alumnos (
 );
 
 --4. Tabla Principal: Inscripciones (HISTORIAL)
-CREATE TABLE Inscripciones (
+CREATE TABLE IF NOT EXISTS  Inscripciones (
     id_inscripcion SERIAL PRIMARY KEY,
     dni_alumno INT NOT NULL,
     id_curso INT NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE Inscripciones (
 );
 
 --5. Tabla Principal: Asistencia
-CREATE TABLE Asistencias (
+CREATE TABLE IF NOT EXISTS  Asistencias (
     id_asistencia BIGSERIAL,
     dni_alumno INT NOT NULL,
     fecha DATE NOT NULL,
@@ -51,21 +51,21 @@ CREATE TABLE Asistencias (
 ) PARTITION BY RANGE (fecha);
 
 -- 1er Año del alumno (Histórico)
-CREATE TABLE Asistencias_2022 PARTITION OF Asistencias
+CREATE TABLE IF NOT EXISTS Asistencias_2022 PARTITION OF Asistencias
     FOR VALUES FROM ('2022-01-01') TO ('2023-01-01');
 
 -- 2do Año del alumno (Histórico)
-CREATE TABLE Asistencias_2023 PARTITION OF Asistencias
+CREATE TABLE IF NOT EXISTS Asistencias_2023 PARTITION OF Asistencias
     FOR VALUES FROM ('2023-01-01') TO ('2024-01-01');
 
 -- 3er Año del alumno (Histórico)
-CREATE TABLE Asistencias_2024 PARTITION OF Asistencias
+CREATE TABLE IF NOT EXISTS  Asistencias_2024 PARTITION OF Asistencias
     FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
 
 -- 4to Año del alumno (Histórico)
-CREATE TABLE Asistencias_2025 PARTITION OF Asistencias
+CREATE TABLE IF NOT EXISTS  Asistencias_2025 PARTITION OF Asistencias
     FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
 
 -- 5to Año del alumno (Año actual cursando)
-CREATE TABLE Asistencias_2026 PARTITION OF Asistencias
+CREATE TABLE IF NOT EXISTS  Asistencias_2026 PARTITION OF Asistencias
     FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
