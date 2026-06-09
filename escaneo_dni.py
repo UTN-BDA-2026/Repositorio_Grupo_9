@@ -3,6 +3,7 @@ import socket
 import threading
 import time
 import json
+import requests
 
 class EscanerDNI:
     def __init__(self, app, on_dni_detectado=None):
@@ -89,13 +90,6 @@ class EscanerDNI:
                     self.actualizar_detalle({'raw': texto_escaneado, 'fields': [texto_escaneado]})
                 except Exception:
                     pass
-            
-            # =========================================================
-            # AQUÍ ES DONDE LLAMARÍAMOS A TU BASE DE DATOS POSTGRESQL
-            # if dni:
-            #     registrar_fichada(dni)
-            # =========================================================
-
             return dni
             
         except Exception as e:
@@ -211,7 +205,22 @@ def crear_interfaz():
     app.title("Control de Acceso - DNI Scanner")
     
     def on_dni_detectado(dni, texto_completo):
-        print(f"🔗 DNI entregado al programa: {dni}")
+        print(f"🔗 DNI detectado: {dni}")
+        try:
+            print("🚀 Enviando a FastAPI...")
+            url_api = "http://localhost:8000/fichar"
+            payload = {"dni": dni}
+            
+            respuesta = requests.post(url_api, json=payload)
+            datos_respuesta = respuesta.json()
+            
+            if datos_respuesta.get("status") == "success":
+                print(f"🏛️ PostgreSQL respondió: {datos_respuesta.get('mensaje')}")
+            else:
+                print(f"❌ Error devuelto por la API: {datos_respuesta.get('mensaje')}")
+                
+        except Exception as e:
+            print(f"🔌 Error de conexión: {e}")
 
     # Instancia del escáner
     escaner = EscanerDNI(app, on_dni_detectado=on_dni_detectado)
