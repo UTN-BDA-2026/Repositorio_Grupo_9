@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS  Cursos (
 );
 
 -- Tabla intermedia para permitir que un mismo curso esté en varios turnos
-CREATE TABLE IF NOT EXISTS Curso_Turnos (
+CREATE TABLE IF NOT EXISTS Curso_Horarios (
     id_curso_horario SERIAL PRIMARY KEY,
     id_curso INT NOT NULL REFERENCES Cursos(id_curso),
     id_horario INT NOT NULL REFERENCES Turnos(id_horario),
@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS  Alumnos (
     dni SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL,
     apellido VARCHAR(50) NOT NULL,
+    estado VARCHAR(20) DEFAULT 'ACTIVO', --Ej: 'ACTIVO', 'INACTIVO'
     tipo_documento VARCHAR(20) NOT NULL, --Ej: 'DNI', 'Pasaporte'
     fecha_nacimiento DATE NOT NULL,
     sexo VARCHAR(10) NOT NULL, --Ej: 'Masculino', 'Femenino', 'Otro'
