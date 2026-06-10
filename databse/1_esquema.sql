@@ -1,29 +1,30 @@
---1. Tabla PARAMÉTRICA: Horarios de Turno
-CREATE TABLE IF NOT EXISTS Horario (
-    id_horario SERIAL PRIMARY KEY,
-    descripcion VARCHAR(50) NOT NULL,
-    hora_inicio TIME NOT NULL,
-    turno VARCHAR(20) NOT NULL --Ej: 'Mañana', 'Tarde', 'Noche'
-    hora_fin TIME NOT NULL
-);
-
---2. Tabla Paramétrica: Cursos
+--1. Tabla Paramétrica: Cursos
 CREATE TABLE IF NOT EXISTS  Cursos (
     id_curso SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL, --Ej: '3ro A'
-    id_horario INT NOT NULL,
-    FOREIGN KEY (id_horario) REFERENCES Turnos(id_horario)
+    hora_entrada_maniana_lunes TIME,
+    hora_salida_maniana_lunes TIME,
+    hora_entrada_maniana_martes TIME,
+    hora_salida_maniana_martes TIME,
+    hora_entrada_maniana_miercoles TIME,
+    hora_salida_maniana_miercoles TIME,
+    hora_entrada_maniana_jueves TIME,
+    hora_salida_maniana_jueves TIME,
+    hora_entrada_maniana_viernes TIME,
+    hora_salida_maniana_viernes TIME,
+    hora_entrada_tarde_lunes TIME,
+    hora_salida_tarde_lunes TIME,
+    hora_entrada_tarde_martes TIME,
+    hora_salida_tarde_martes TIME,
+    hora_entrada_tarde_miercoles TIME,
+    hora_salida_tarde_miercoles TIME,
+    hora_entrada_tarde_jueves TIME,
+    hora_salida_tarde_jueves TIME,
+    hora_entrada_tarde_viernes TIME,
+    hora_salida_tarde_viernes TIME,
 );
 
--- Tabla intermedia para permitir que un mismo curso esté en varios turnos
-CREATE TABLE IF NOT EXISTS Curso_Horarios (
-    id_curso_horario SERIAL PRIMARY KEY,
-    id_curso INT NOT NULL REFERENCES Cursos(id_curso),
-    id_horario INT NOT NULL REFERENCES Turnos(id_horario),
-    UNIQUE (id_curso, id_horario)
-);
-
---3. Tabla Principal: Alumnos
+--2. Tabla Principal: Alumnos
 CREATE TABLE IF NOT EXISTS  Alumnos (
     dni SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL,
@@ -34,33 +35,30 @@ CREATE TABLE IF NOT EXISTS  Alumnos (
     sexo VARCHAR(10) NOT NULL, --Ej: 'Masculino', 'Femenino', 'Otro'
     nro_legajo INT UNIQUE,
     fecha_ingreso DATE
+    curso_actual INT NOT NULL,
+    FOREIGN KEY (curso_actual) REFERENCES Cursos(id_curso)
 );
 
---4. Tabla Principal: Inscripciones (HISTORIAL)
+--3. Tabla Principal: Inscripciones (HISTORIAL)
 CREATE TABLE IF NOT EXISTS  Inscripciones (
     id_inscripcion SERIAL PRIMARY KEY,
     dni_alumno INT NOT NULL,
     id_curso INT NOT NULL,
-    id_curso_horario INT,
     ciclo_lectivo INT NOT NULL, --Ej: 2024
-    FOREIGN KEY (dni_alumno) REFERENCES Alumnos(dni),
+    fecha_inscripcion DATE NOT NULL DEFAULT CURRENT_DATE,
+    FOREIGN KEY (dni_alumno) REFERENCES Alumnos(dni) ON DELETE CASCADE,
     FOREIGN KEY (id_curso) REFERENCES Cursos(id_curso),
-    FOREIGN KEY (id_curso_horario) REFERENCES Curso_Turnos(id_curso_horario),
     UNIQUE (dni_alumno, id_curso, ciclo_lectivo) -- Evita inscripciones duplicadas para el mismo alumno, curso y ciclo
 );
 
---5. Tabla Principal: Asistencia
+--4. Tabla Principal: Asistencia
 CREATE TABLE IF NOT EXISTS  Asistencias (
     id_asistencia BIGSERIAL,
     dni_alumno INT NOT NULL,
-    id_horario INT NOT NULL,
-    fecha DATE NOT NULL,
-    hora_entrada TIME NOT NULL,
-    hora_salida TIME,
-    estado VARCHAR(50) DEFAULT 'PRESENTE',
-    causa_retiro VARCHAR(255),
+    fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+    hora_entrada TIME NOT NULL DEFAULT CURRENT_TIME,
+    estado VARCHAR(50) NOT NULL, --Ej: 'PRESENTE', 'AUSENTE', 'TARDANZA'
     PRIMARY KEY (id_asistencia, fecha), 
-    FOREIGN KEY (id_horario) REFERENCES Turnos(id_horario),
     FOREIGN KEY (dni_alumno) REFERENCES Alumnos(dni) ON DELETE CASCADE
 ) PARTITION BY RANGE (fecha);
 
