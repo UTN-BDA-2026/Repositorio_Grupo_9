@@ -30,9 +30,9 @@ CREATE TABLE IF NOT EXISTS  Alumnos (
     dni INT PRIMARY KEY,
     nombre TEXT NOT NULL,
     apellido TEXT NOT NULL,
-    estado VARCHAR(8), --Ej: 'ACTIVO', 'INACTIVO'
+    estado VARCHAR(8) CHECK (estado IN ('ACTIVO', 'INACTIVO')),
     fecha_nacimiento DATE NOT NULL,
-    sexo VARCHAR(9) NOT NULL, --Ej: 'Masculino', 'Femenino', 'Otro'
+    sexo VARCHAR(9) NOT NULL CHECK (sexo IN ('MASCULINO', 'FEMENINO', 'OTRO')),
     nro_legajo INT UNIQUE,
     fecha_ingreso DATE,
     curso_actual INT NOT NULL,
@@ -57,8 +57,9 @@ CREATE TABLE IF NOT EXISTS  Asistencias (
     dni_alumno INT NOT NULL,
     fecha DATE NOT NULL DEFAULT CURRENT_DATE,
     hora_entrada TIME NOT NULL DEFAULT CURRENT_TIME,
-    estado VARCHAR(8) NOT NULL, --Ej: 'PRESENTE', 'AUSENTE', 'TARDANZA'
+    estado VARCHAR(8) NOT NULL CHECK (estado IN ('PRESENTE', 'AUSENTE', 'TARDANZA')),
     justificacion TEXT, -- Opcional, para explicar ausencias o tardanzas
+    turno VARCHAR(6) NOT NULL CHECK (turno IN ('MAÑANA', 'TARDE')),
     PRIMARY KEY (id_asistencia, fecha), 
     FOREIGN KEY (dni_alumno) REFERENCES Alumnos(dni) ON DELETE CASCADE
 ) PARTITION BY RANGE (fecha);
