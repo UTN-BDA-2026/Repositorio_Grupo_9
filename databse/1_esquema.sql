@@ -21,12 +21,12 @@ CREATE TABLE IF NOT EXISTS  Cursos (
     hora_entrada_tarde_jueves TIME,
     hora_salida_tarde_jueves TIME,
     hora_entrada_tarde_viernes TIME,
-    hora_salida_tarde_viernes TIME,
+    hora_salida_tarde_viernes TIME
 );
 
 --2. Tabla Principal: Alumnos
 CREATE TABLE IF NOT EXISTS  Alumnos (
-    dni SERIAL PRIMARY KEY,
+    dni INT PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL,
     apellido VARCHAR(50) NOT NULL,
     estado VARCHAR(20) DEFAULT 'ACTIVO', --Ej: 'ACTIVO', 'INACTIVO'
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS  Alumnos (
     fecha_nacimiento DATE NOT NULL,
     sexo VARCHAR(10) NOT NULL, --Ej: 'Masculino', 'Femenino', 'Otro'
     nro_legajo INT UNIQUE,
-    fecha_ingreso DATE
+    fecha_ingreso DATE,
     curso_actual INT NOT NULL,
     FOREIGN KEY (curso_actual) REFERENCES Cursos(id_curso)
 );
@@ -84,38 +84,3 @@ CREATE TABLE IF NOT EXISTS  Asistencias_2026 PARTITION OF Asistencias
 
 -- Partición de respaldo para fechas fuera de los rangos anteriores
 CREATE TABLE IF NOT EXISTS Asistencias_default PARTITION OF Asistencias DEFAULT;
-
--- Migración mínima: poblar Curso_Turnos desde el campo existente Cursos.id_turno
--- y mapear las inscripciones existentes a id_curso_turno.
--- Ejecutar en un entorno controlado (hacer backup antes).
-INSERT INTO Curso_Turnos (id_curso, id_turno)
-SELECT id_curso, id_turno FROM Cursos
-ON CONFLICT (id_curso, id_turno) DO NOTHING;
-
--- Mapear inscripciones que aún no tengan id_curso_turno
-UPDATE Inscripciones i
-SET id_curso_turno = ct.id_curso_turno
-FROM Curso_Turnos ct
-WHERE i.id_curso = ct.id_curso
-    AND i.id_curso_turno IS NULL;
-
--- Nota: si hay inscripciones que no pudieron mapearse o casos ambiguos,
--- revisarlos manualmente. Después de validar, se puede eliminar la columna
--- Inscripciones.id_curso (si se desea), pero hacerlo sólo tras pruebas.
-
--- Crear índice único para garantizar unicidad por curso_turno y ciclo
-CREATE UNIQUE INDEX IF NOT EXISTS ux_inscripciones_dni_cursoturno_ciclo
-ON Inscripciones (dni_alumno, id_curso_turno, ciclo_lectivo);
-
--- Verificar y, si es seguro, poner id_curso_turno NOT NULL y eliminar id_curso
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM Inscripciones WHERE id_curso_turno IS NULL) THEN
-        RAISE NOTICE 'Hay inscripciones con id_curso_turno NULL. Revise antes de forzar NOT NULL y eliminar id_curso.';
-    ELSE
-        ALTER TABLE Inscripciones ALTER COLUMN id_curso_turno SET NOT NULL;
-        -- Eliminar columna id_curso si ya no es necesaria (se usa CASCADE para limpiar constraints antiguas)
-        ALTER TABLE Inscripciones DROP COLUMN IF EXISTS id_curso CASCADE;
-    END IF;
-END
-$$;
