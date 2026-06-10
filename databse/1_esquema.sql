@@ -1,7 +1,8 @@
 --1. Tabla Paramétrica: Cursos
 CREATE TABLE IF NOT EXISTS  Cursos (
     id_curso SERIAL PRIMARY KEY,
-    nombre VARCHAR(50) NOT NULL, --Ej: '3ro A'
+    anio INT NOT NULL, -- Ej: 1, 2, 3, 4, 5, 6
+    division VARCHAR(1) NOT NULL,
     hora_entrada_maniana_lunes TIME,
     hora_salida_maniana_lunes TIME,
     hora_entrada_maniana_martes TIME,
@@ -27,12 +28,11 @@ CREATE TABLE IF NOT EXISTS  Cursos (
 --2. Tabla Principal: Alumnos
 CREATE TABLE IF NOT EXISTS  Alumnos (
     dni INT PRIMARY KEY,
-    nombre VARCHAR(50) NOT NULL,
-    apellido VARCHAR(50) NOT NULL,
-    estado VARCHAR(20) DEFAULT 'ACTIVO', --Ej: 'ACTIVO', 'INACTIVO'
-    tipo_documento VARCHAR(20) NOT NULL, --Ej: 'DNI', 'Pasaporte'
+    nombre TEXT NOT NULL,
+    apellido TEXT NOT NULL,
+    estado VARCHAR(8), --Ej: 'ACTIVO', 'INACTIVO'
     fecha_nacimiento DATE NOT NULL,
-    sexo VARCHAR(10) NOT NULL, --Ej: 'Masculino', 'Femenino', 'Otro'
+    sexo VARCHAR(9) NOT NULL, --Ej: 'Masculino', 'Femenino', 'Otro'
     nro_legajo INT UNIQUE,
     fecha_ingreso DATE,
     curso_actual INT NOT NULL,
@@ -57,10 +57,22 @@ CREATE TABLE IF NOT EXISTS  Asistencias (
     dni_alumno INT NOT NULL,
     fecha DATE NOT NULL DEFAULT CURRENT_DATE,
     hora_entrada TIME NOT NULL DEFAULT CURRENT_TIME,
-    estado VARCHAR(50) NOT NULL, --Ej: 'PRESENTE', 'AUSENTE', 'TARDANZA'
+    estado VARCHAR(8) NOT NULL, --Ej: 'PRESENTE', 'AUSENTE', 'TARDANZA'
+    justificacion TEXT, -- Opcional, para explicar ausencias o tardanzas
     PRIMARY KEY (id_asistencia, fecha), 
     FOREIGN KEY (dni_alumno) REFERENCES Alumnos(dni) ON DELETE CASCADE
 ) PARTITION BY RANGE (fecha);
+
+--5. Tabla Principal: Excepciones al Calendario
+CREATE TABLE IF NOT EXISTS Excepciones_Calendario (
+    id_excepcion SERIAL PRIMARY KEY,
+    fecha DATE NOT NULL,
+    id_curso INT, -- IMPORTANTE: Permite NULL. Si es NULL, aplica a toda la escuela.
+    motivo TEXT NOT NULL, -- Ej: 'Feriado Nacional', 'Día del Estudiante', 'Ausencia de Profesor'
+    tipo_alcance VARCHAR(10) NOT NULL CHECK (tipo_alcance IN ('GLOBAL', 'CURSO')),
+    FOREIGN KEY (id_curso) REFERENCES Cursos(id_curso) ON DELETE CASCADE,
+    UNIQUE (fecha, id_curso) -- Evita cargar dos veces la misma suspensión para el mismo curso en la misma fecha
+);
 
 -- Particiones por año calendario de la fecha de asistencia
 CREATE TABLE IF NOT EXISTS Asistencias_2022 PARTITION OF Asistencias
