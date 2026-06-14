@@ -30,7 +30,13 @@ Cuando el sistema recibe un DNI, la base de datos evalúa el contexto temporal y
             - La hora del sistema es igual a la hora de salida.
             - No hay registros del DNI en el turno actual.
         * Acción: El sistema automáticamente hace un `INSERT` registrando el DNI del alumno, la fecha de hoy y el turno actual. El estado por defecto es `'AUSENTE'`.
- 
+    5. Sin registro:
+            - EL DNI NO está registrado; o
+            - El alumno está clasificado como `'inactivo'`; o
+            - El alumno NO tiene un horario de entrada registrado para ese turno; o
+            - Es sábado o domingo.
+        * Acción: El sistema muestra un mensaje de error por medio del frontend.
+
 3. El Flujo de Trabajo del Preceptor (Intervención Manual)
     - El sistema automatiza todo, pero deja las excepciones para los humanos.
     - El preceptor, a través de la interfaz visual, debe filtrar esos casos puntuales del día y hacer un `UPDATE` manual escribiendo el motivo de una falta justificada (ej: "Faltó por fiebre").
