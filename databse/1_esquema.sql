@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS  Alumnos (
     estado VARCHAR(8) CHECK (estado IN ('ACTIVO', 'INACTIVO')),
     fecha_nacimiento DATE NOT NULL,
     sexo VARCHAR(9) NOT NULL CHECK (sexo IN ('MASCULINO', 'FEMENINO', 'OTRO')),
-    nro_legajo INT UNIQUE,
+    nro_legajo INT UNIQUE NOT NULL,
     fecha_ingreso DATE,
     curso_actual INT NOT NULL,
     FOREIGN KEY (curso_actual) REFERENCES Cursos(id_curso)
