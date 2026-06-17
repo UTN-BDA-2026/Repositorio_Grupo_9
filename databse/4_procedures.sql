@@ -278,8 +278,9 @@ BEGIN
   END IF;
 
   -- ========================================================================
-  -- 9️⃣ MÁQUINA DE ESTADOS: DETERMINAR ESTADO
+  -- 9️⃣ MÁQUINA DE ESTADOS: DETERMINAR ESTADO (PRESENTE o TARDANZA)
   -- ========================================================================
+  -- Nota: AUSENTE se registra en procedimiento separado al cerrar turno
   v_margen_tolerancia := INTERVAL '15 minutes';
 
   IF v_hora_actual <= v_hora_entrada + v_margen_tolerancia THEN
@@ -315,6 +316,135 @@ EXCEPTION WHEN OTHERS THEN
     NULL::BIGINT,
     NULL::VARCHAR,
     ('Error en registrar_fichada: ' || SQLERRM)::VARCHAR;
+
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ============================================================================
+-- PROCEDIMIENTO: registrar_ausentes_cierre_turno()
+-- ============================================================================
+-- Objetivo: Registrar automáticamente como AUSENTE a todos los alumnos
+--           ACTIVOS que tienen horario para un turno pero NO tienen registro
+--           de asistencia hoy en ese turno.
+--
+-- Entrada: p_turno VARCHAR ('MAÑANA' o 'TARDE')
+-- Salida: TABLE (total_registrados INT, mensaje VARCHAR)
+--
+-- Flujo:
+--   1. Valida que el turno sea válido
+--   2. Para CADA alumno ACTIVO:
+--      - Obtiene su curso
+--      - Verifica si tiene horario para ese turno hoy
+--      - Verifica si NO existe registro para hoy en ese turno
+--      - Si cumple: INSERT como AUSENTE
+--   3. Retorna cantidad de ausentes registrados
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION registrar_ausentes_cierre_turno(p_turno VARCHAR)
+RETURNS TABLE (
+  total_registrados INT,
+  mensaje VARCHAR
+) AS $$
+DECLARE
+  v_fecha_actual DATE;
+  v_dia_semana SMALLINT;
+  v_dia_nombre VARCHAR;
+  v_contador INT := 0;
+  v_alumno_record RECORD;
+  v_tiene_horario BOOLEAN;
+  v_tiene_asistencia BOOLEAN;
+  v_hora_entrada TIME;
+  v_hora_salida TIME;
+  
+BEGIN
+  -- ========================================================================
+  -- 1️⃣ VALIDACIÓN: ¿TURNO ES VÁLIDO?
+  -- ========================================================================
+  IF UPPER(p_turno) NOT IN ('MAÑANA', 'TARDE') THEN
+    RETURN QUERY SELECT 
+      0::INT,
+      'Error: turno debe ser MAÑANA o TARDE'::VARCHAR;
+    RETURN;
+  END IF;
+
+  -- ========================================================================
+  -- 2️⃣ OBTENER FECHA Y DÍA ACTUAL
+  -- ========================================================================
+  v_fecha_actual := CURRENT_DATE;
+  v_dia_semana := EXTRACT(DOW FROM v_fecha_actual)::SMALLINT;
+
+  -- Validar no es fin de semana
+  IF v_dia_semana IN (0, 6) THEN
+    RETURN QUERY SELECT 
+      0::INT,
+      'No se registran ausentes los fines de semana'::VARCHAR;
+    RETURN;
+  END IF;
+
+  v_dia_nombre := obtener_nombre_dia_semana(v_fecha_actual);
+
+  -- ========================================================================
+  -- 3️⃣ ITERAR SOBRE TODOS LOS ALUMNOS ACTIVOS
+  -- ========================================================================
+  FOR v_alumno_record IN (
+    SELECT dni, curso_actual FROM Alumnos WHERE estado = 'ACTIVO'
+  ) LOOP
+
+    -- ====================================================================
+    -- 4️⃣ VERIFICAR SI TIENE HORARIO PARA ESTE TURNO HOY
+    -- ====================================================================
+    SELECT hora_entrada, hora_salida 
+      INTO v_hora_entrada, v_hora_salida
+      FROM obtener_horario_turno(v_alumno_record.curso_actual, UPPER(p_turno), v_dia_nombre);
+
+    -- Si no tiene horario para este turno → siguiente alumno
+    IF v_hora_entrada IS NULL THEN
+      CONTINUE;
+    END IF;
+
+    -- ====================================================================
+    -- 5️⃣ VERIFICAR SI YA EXISTE REGISTRO PARA HOY EN ESTE TURNO
+    -- ====================================================================
+    SELECT EXISTS (
+      SELECT 1 FROM Asistencias
+       WHERE dni_alumno = v_alumno_record.dni
+         AND fecha = v_fecha_actual
+         AND turno = UPPER(p_turno)
+       LIMIT 1
+    ) INTO v_tiene_asistencia;
+
+    -- Si ya existe registro → siguiente alumno
+    IF v_tiene_asistencia THEN
+      CONTINUE;
+    END IF;
+
+    -- ====================================================================
+    -- 6️⃣ INSERTAR COMO AUSENTE
+    -- ====================================================================
+    BEGIN
+      INSERT INTO Asistencias (dni_alumno, fecha, hora_entrada, estado, turno)
+        VALUES (v_alumno_record.dni, v_fecha_actual, NULL::TIME, 'AUSENTE', UPPER(p_turno));
+      
+      v_contador := v_contador + 1;
+    EXCEPTION WHEN OTHERS THEN
+      -- Ignorar errores individuales y continuar con el siguiente alumno
+      NULL;
+    END;
+
+  END LOOP;
+
+  -- ========================================================================
+  -- 7️⃣ RETORNAR RESULTADO
+  -- ========================================================================
+  RETURN QUERY SELECT 
+    v_contador::INT,
+    ('Se registraron ' || v_contador::TEXT || ' ausentes para el turno ' || UPPER(p_turno))::VARCHAR;
+
+EXCEPTION WHEN OTHERS THEN
+  RETURN QUERY SELECT 
+    0::INT,
+    ('Error en registrar_ausentes_cierre_turno: ' || SQLERRM)::VARCHAR;
 
 END;
 $$ LANGUAGE plpgsql;

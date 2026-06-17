@@ -22,15 +22,8 @@ Cuando el sistema recibe un DNI, la base de datos evalúa el contexto temporal y
         * Acción: Se hace un `INSERT` registrando la hora de entrada, la fecha de hoy y el turno actual. El estado por defecto es `'TARDANZA'`.
     3. Filtro Anti-Rebote (Error de escaneo/Duplicado):
         * Condición: Ya hay un registro del DNI en ese turno.
-        * Acción: El sistema ignora la transacción (no hace nada) para evitar duplicados.
-    4. Ausente:
-        * Condiciones: 
-            - El alumno está clasificado como `'activo'`.
-            - El alumno tiene un horario de entrada registrado para ese turno.
-            - La hora del sistema es igual a la hora de salida.
-            - No hay registros del DNI en el turno actual.
-        * Acción: El sistema automáticamente hace un `INSERT` registrando el DNI del alumno, la fecha de hoy y el turno actual. El estado por defecto es `'AUSENTE'`.
-    5. Sin registro:
+        * Acción: El sistema ignora la transacción (no hace nada) para evitar duplicados. Muestra un mensaje de error en la UI indicando el estado actual (`'PRESENTE'`/`'TARDANZA'`/`'AUSENTE'`)
+    4. Sin registro:
             - EL DNI NO está registrado; o
             - El alumno está clasificado como `'inactivo'`; o
             - El alumno NO tiene un horario de entrada registrado para ese turno; o
@@ -38,8 +31,17 @@ Cuando el sistema recibe un DNI, la base de datos evalúa el contexto temporal y
         * Acción: El sistema muestra un mensaje de error por medio del frontend.
 
 3. El Flujo de Trabajo del Preceptor (Intervención Manual)
-    - El sistema automatiza todo, pero deja las excepciones para los humanos.
-    - El preceptor, a través de la interfaz visual, debe filtrar esos casos puntuales del día y hacer un `UPDATE` manual escribiendo el motivo de una falta justificada (ej: "Faltó por fiebre").
+    - El sistema automatiza los presentes, pero deja las excepciones y los ausentes para los humanos.
+    - El preceptor, a través de la interfaz visual, debe filtrar las excepciones puntuales del día y hacer un `UPDATE` manual escribiendo el motivo de una falta justificada (ej: "Faltó por fiebre").
+    - Para colocar `'AUSENTE'`:
+        1. El preceptor presiona un botón en la interfaz gráfica que indica "CERRAR TURNO".
+        2. La base de datos registra como ausentes a los siguientes alumnos basado en el siguiente procedimiento:
+            - Define el turno actual.
+            - Registra a un alumno si:
+                - El alumno está clasificado como `'activo'`.
+                - El alumno tiene un horario de entrada registrado para ese turno.
+                - No hay registros del DNI en el turno actual.
+        Acción: El sistema hace un `INSERT` registrando el DNI del alumno, la fecha de hoy y el turno actual. El estado por defecto es `'AUSENTE'`.
 
 4. Gestión del Histórico Escolar (El modelo de 5 años)
     - Trazabilidad sin redundancia: El sistema está preparado para acompañar al alumno desde 1er año hasta 5to año sin mezclar datos. Esto se logra mediante la tabla intermedia `Inscripciones`, que asocia un DNI a un curso específico por cada `ciclo_lectivo`.
