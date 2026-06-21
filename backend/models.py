@@ -46,7 +46,7 @@ class AlumnoCreate(BaseModel):
     sexo: str
     nro_legajo: int = Field(..., ge=1)
     fecha_ingreso: date | None = None
-    curso_id: int = Field(..., ge=1)
+    id_curso: int = Field(..., ge=1)
 
 class AsistenciaUpdate(BaseModel):
     estado: str
@@ -60,5 +60,7 @@ class ExcepcionesCalendarioCreate(BaseModel):
     id_curso: int | None = None  # Permite None para feriados globales
 
 class InscripcionCreate(BaseModel):
-    alumno_dni: int = Field(..., ge=1)
-    curso_id: int = Field(..., ge=1)
+    dni_alumno: int = Field(..., ge=1)
+    id_curso: int = Field(..., ge=1)
+    ciclo_lectivo: int = Field(..., ge=1)
+    fecha_inscripcion: date | None = None

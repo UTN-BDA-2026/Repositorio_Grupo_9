@@ -5,7 +5,7 @@ import asyncpg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from models import FichadaRegistrada, CursoCreate, AlumnoCreate, AsistenciaUpdate, ExcepcionesCalendarioCreate, InscripcionCreate
+from .models import FichadaRegistrada, CursoCreate, AlumnoCreate, AsistenciaUpdate, ExcepcionesCalendarioCreate, InscripcionCreate
 from datetime import date,time
 
 load_dotenv()
@@ -34,6 +34,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Asistencia API", version="1.0.0", lifespan=lifespan)
+
+# Para que los endpoints en tests no fallen si el lifespan no inicializa pool
+@app.middleware("http")
+async def ensure_pool_exists(request, call_next):
+    if not hasattr(app.state, "pool"):
+        app.state.pool = None
+    return await call_next(request)
+
 
 
 @app.get("/health")
@@ -175,7 +183,7 @@ async def actualizar_alumno(dni: int, payload: AlumnoCreate) -> dict[str, str]:
 				payload.sexo,
 				payload.nro_legajo,
 				payload.fecha_ingreso,
-				payload.curso_id,
+				payload.id_curso,
 				dni
 			)
 		if result == "UPDATE 0":
@@ -512,7 +520,7 @@ async def actualizar_excepcion(id_excepcion: int, payload: ExcepcionesCalendario
     except asyncpg.PostgresError as exc:
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
-@app.put("/inscripciones")
+@app.post("/inscripciones")
 async def inscribir_alumno(payload: InscripcionCreate) -> dict[str, str]:
 	if app.state.pool is None:
 		raise HTTPException(
@@ -523,13 +531,15 @@ async def inscribir_alumno(payload: InscripcionCreate) -> dict[str, str]:
 	try:
 		async with app.state.pool.acquire() as conn:
 			await conn.execute(
-				"""INSERT INTO Inscripciones (alumno_dni, curso_id)
-				VALUES ($1, $2);
+				"""INSERT INTO Inscripciones (dni_alumno, id_curso, ciclo_lectivo, fecha_inscripcion)
+				VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE));
 				""",
-				payload.alumno_dni,
-				payload.curso_id
+				payload.dni_alumno,
+				payload.id_curso,
+				payload.ciclo_lectivo,
+				payload.fecha_inscripcion
 			)
-		return {"mensaje": f"Alumno con DNI {payload.alumno_dni} inscrito en curso ID {payload.curso_id} exitosamente."}
+		return {"mensaje": f"Alumno con DNI {payload.dni_alumno} inscrito en curso ID {payload.id_curso} exitosamente."}
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
@@ -552,6 +562,9 @@ async def listar_inscripciones() -> list[dict[str, str]]:
 
 @app.get("/estadisticas/asistencias")
 async def estadisticas_asistencias() -> dict[str, int]:
+	# compatible con tests antiguos (si venían con querystring)
+	# se ignoran parámetros no declarados
+	
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
