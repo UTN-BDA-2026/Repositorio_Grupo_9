@@ -5,7 +5,16 @@ import asyncpg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from .models import FichadaRegistrada, CursoCreate, AlumnoCreate, AsistenciaUpdate, ExcepcionesCalendarioCreate, InscripcionCreate
+from .models import (
+	FichadaRegistrada,
+	CursoCreate,
+	AlumnoCreate,
+	AlumnoUpdate,
+	AsistenciaUpdate,
+	ExcepcionesCalendarioCreate,
+	ExcepcionUpdate,
+	InscripcionCreate,
+)
 from datetime import date,time
 
 load_dotenv()
@@ -45,14 +54,14 @@ async def ensure_pool_exists(request, call_next):
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
+async def health() -> dict:
 	if app.state.pool is None:
 		return {"status": "degraded", "database": "not_configured"}
 	return {"status": "ok", "database": "connected"}
 
 
 @app.post("/fichada")
-async def registrar_fichada(payload: FichadaRegistrada) -> dict[str, str]:
+async def registrar_fichada(payload: FichadaRegistrada) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -70,7 +79,7 @@ async def registrar_fichada(payload: FichadaRegistrada) -> dict[str, str]:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.post("/alumnos")
-async def crear_alumno(payload: AlumnoCreate) -> dict[str, str]:
+async def crear_alumno(payload: AlumnoCreate) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -91,14 +100,17 @@ async def crear_alumno(payload: AlumnoCreate) -> dict[str, str]:
 				payload.sexo,
 				payload.nro_legajo,
 				payload.fecha_ingreso,
-				payload.curso_id
+				payload.id_curso
 			)
-		return {"mensaje": f"El Alumno se acaba de añadir al sistema exitosamente.", "dni": payload.dni}
+		return {"mensaje": "El Alumno se acaba de añadir al sistema exitosamente.", "dni": payload.dni}
+	# FIX: capturamos el error específico de DNI/legajo duplicado ANTES del genérico, para devolver 409 (Conflicto) en vez de 500.
+	except asyncpg.UniqueViolationError as exc:
+		raise HTTPException(status_code=409, detail=f"Ya existe un alumno con DNI {payload.dni} o legajo {payload.nro_legajo}.") from exc
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.get("/alumnos/{dni}")
-async def leer_alumno(dni: int) -> dict[str, str]:
+async def leer_alumno(dni: int) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -119,7 +131,7 @@ async def leer_alumno(dni: int) -> dict[str, str]:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.get("/alumnos")
-async def buscar_alumnos(nombre: str | None = None, apellido: str | None = None) -> list[dict[str, str]]:
+async def buscar_alumnos(nombre: str | None = None, apellido: str | None = None) -> list[dict]:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -129,9 +141,10 @@ async def buscar_alumnos(nombre: str | None = None, apellido: str | None = None)
 	try:
 		async with app.state.pool.acquire() as conn:
 			alumnos = await conn.fetch(
+				# FIX: agregamos ::text para que Postgres pueda inferir el tipo cuando $1/$2 llegan como NULL (sin filtros).
 				"""SELECT * FROM Alumnos
-				WHERE ($1 IS NULL OR nombre ILIKE '%' || $1 || '%')
-				AND ($2 IS NULL OR apellido ILIKE '%' || $2 || '%');
+				WHERE ($1::text IS NULL OR nombre ILIKE '%' || $1 || '%')
+				AND ($2::text IS NULL OR apellido ILIKE '%' || $2 || '%');
 				""",
 				nombre,
 				apellido
@@ -141,7 +154,7 @@ async def buscar_alumnos(nombre: str | None = None, apellido: str | None = None)
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.delete("/alumnos/{dni}")
-async def eliminar_alumno(dni: int) -> dict[str, str]:
+async def eliminar_alumno(dni: int) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -161,31 +174,37 @@ async def eliminar_alumno(dni: int) -> dict[str, str]:
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
+# FIX: ahora recibe AlumnoUpdate (campos opcionales) y construye el UPDATE dinámicamente, tocando solo las columnas que el cliente realmente mandó.
 @app.put("/alumnos/{dni}")
-async def actualizar_alumno(dni: int, payload: AlumnoCreate) -> dict[str, str]:
+async def actualizar_alumno(dni: int, payload: AlumnoUpdate) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
 			detail="DATABASE_URL no configurada. Completa el archivo .env.",
 		)
 
+	datos = payload.model_dump(exclude_unset=True)
+	if not datos:
+		raise HTTPException(status_code=400, detail="No se enviaron campos para actualizar.")
+
+	# Mapeo de nombre de campo del modelo -> nombre real de columna en la DB
+	columnas = {"id_curso": "curso_actual"}
+
+	sets: list[str] = []
+	valores: list = []
+	contador = 1
+	for campo, valor in datos.items():
+		columna = columnas.get(campo, campo)
+		sets.append(f"{columna} = ${contador}")
+		valores.append(valor)
+		contador += 1
+
+	valores.append(dni)
+	query = f"UPDATE Alumnos SET {', '.join(sets)} WHERE dni = ${contador};"
+
 	try:
 		async with app.state.pool.acquire() as conn:
-			result = await conn.execute(
-				"""UPDATE Alumnos
-				SET nombre = $1, apellido = $2, estado = $3, fecha_nacimiento = $4, sexo = $5, nro_legajo = $6, fecha_ingreso = $7, curso_actual = $8
-				WHERE dni = $9;
-				""",
-				payload.nombre,
-				payload.apellido,
-				payload.estado,
-				payload.fecha_nacimiento,
-				payload.sexo,
-				payload.nro_legajo,
-				payload.fecha_ingreso,
-				payload.id_curso,
-				dni
-			)
+			result = await conn.execute(query, *valores)
 		if result == "UPDATE 0":
 			raise HTTPException(status_code=404, detail=f"Alumno con DNI {dni} no encontrado.")
 		return {"mensaje": f"Alumno con DNI {dni} actualizado exitosamente."}
@@ -193,7 +212,7 @@ async def actualizar_alumno(dni: int, payload: AlumnoCreate) -> dict[str, str]:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.post("/cursos")
-async def crear_curso(payload: CursoCreate) -> dict[str, str]:
+async def crear_curso(payload: CursoCreate) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -235,12 +254,14 @@ async def crear_curso(payload: CursoCreate) -> dict[str, str]:
 				payload.hora_entrada_tarde_viernes,	
 				payload.hora_salida_tarde_viernes
 			)
-		return {"mensaje": f"El Curso se acaba de añadir al sistema exitosamente.", "id_curso": payload.id_curso}
+		return {"mensaje": "El Curso se acaba de añadir al sistema exitosamente.", "id_curso": payload.id_curso}
+	except asyncpg.UniqueViolationError as exc:
+		raise HTTPException(status_code=409, detail=f"Ya existe un curso con ID {payload.id_curso}.") from exc
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.get("/cursos")
-async def listar_cursos() -> list[dict[str, str]]:
+async def listar_cursos() -> list[dict]:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -257,7 +278,7 @@ async def listar_cursos() -> list[dict[str, str]]:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.get("/cursos/{id_curso}")
-async def leer_curso(id_curso: int) -> dict[str, str]:
+async def leer_curso(id_curso: int) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -278,7 +299,7 @@ async def leer_curso(id_curso: int) -> dict[str, str]:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.delete("/cursos/{id_curso}")
-async def eliminar_curso(id_curso: int) -> dict[str, str]:
+async def eliminar_curso(id_curso: int) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -299,7 +320,7 @@ async def eliminar_curso(id_curso: int) -> dict[str, str]:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.put("/cursos/{id_curso}")
-async def actualizar_curso(id_curso: int, payload: CursoCreate) -> dict[str, str]:
+async def actualizar_curso(id_curso: int, payload: CursoCreate) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -350,7 +371,7 @@ async def actualizar_curso(id_curso: int, payload: CursoCreate) -> dict[str, str
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.put("/asistencias/{id_asistencia}")
-async def actualizar_asistencia(id_asistencia: int, payload: AsistenciaUpdate) -> dict[str, str]:
+async def actualizar_asistencia(id_asistencia: int, payload: AsistenciaUpdate) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -376,7 +397,7 @@ async def actualizar_asistencia(id_asistencia: int, payload: AsistenciaUpdate) -
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.get("/asistencias/{id_asistencia}")
-async def leer_asistencia(id_asistencia: int) -> dict[str, str]:
+async def leer_asistencia(id_asistencia: int) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -401,7 +422,7 @@ async def listar_asistencias(
     alumno_dni: int | None = None, 
     fecha: date | None = None, 
     turno: str | None = None
-) -> list[dict[str, str]]:
+) -> list[dict]:
     if app.state.pool is None:
         raise HTTPException(
             status_code=503,
@@ -410,8 +431,9 @@ async def listar_asistencias(
     try:
         async with app.state.pool.acquire() as conn:
             asistencias = await conn.fetch(
+                # FIX: la columna en la tabla Asistencias se llama dni_alumno, no alumno_dni.
                 """SELECT * FROM Asistencias
-                WHERE ($1::int IS NULL OR alumno_dni = $1)
+                WHERE ($1::int IS NULL OR dni_alumno = $1)
                 AND ($2::date IS NULL OR fecha = $2)
                 AND ($3::text IS NULL OR turno = $3);
                 """,
@@ -424,7 +446,7 @@ async def listar_asistencias(
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.post("/excepciones")
-async def crear_excepcion(payload: ExcepcionesCalendarioCreate) -> dict[str, str]:
+async def crear_excepcion(payload: ExcepcionesCalendarioCreate) -> dict:
     if app.state.pool is None:
         raise HTTPException(
             status_code=503,
@@ -447,12 +469,14 @@ async def crear_excepcion(payload: ExcepcionesCalendarioCreate) -> dict[str, str
                 payload.tipo_alcance
             )
         return {"mensaje": f"Excepción '{payload.motivo}' para la fecha {payload.fecha} registrada exitosamente."}
+    except asyncpg.UniqueViolationError as exc:
+        raise HTTPException(status_code=409, detail="Ya existe una excepción para esa fecha y curso.") from exc
     except asyncpg.PostgresError as exc:
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 
 @app.get("/excepciones")
-async def listar_excepciones() -> list[dict[str, str]]:
+async def listar_excepciones() -> list[dict]:
     if app.state.pool is None:
         raise HTTPException(
             status_code=503,
@@ -469,7 +493,7 @@ async def listar_excepciones() -> list[dict[str, str]]:
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.delete("/excepciones/{id_excepcion}")
-async def eliminar_excepcion(id_excepcion: int) -> dict[str, str]:
+async def eliminar_excepcion(id_excepcion: int) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -489,31 +513,37 @@ async def eliminar_excepcion(id_excepcion: int) -> dict[str, str]:
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
+# FIX: ahora recibe ExcepcionUpdate (campos opcionales) y construye el UPDATE  dinámicamente, tocando solo las columnas que el cliente realmente mandó.
 @app.put("/excepciones/{id_excepcion}")
-async def actualizar_excepcion(id_excepcion: int, payload: ExcepcionesCalendarioCreate) -> dict[str, str]:
+async def actualizar_excepcion(id_excepcion: int, payload: ExcepcionUpdate) -> dict:
     if app.state.pool is None:
         raise HTTPException(
             status_code=503,
             detail="DATABASE_URL no configurada. Completa el archivo .env.",
         )
 
-    # Replicamos la validación del POST para evitar inconsistencias
-    if payload.tipo_alcance == 'CURSO' and payload.id_curso is None:
+    datos = payload.model_dump(exclude_unset=True)
+    if not datos:
+        raise HTTPException(status_code=400, detail="No se enviaron campos para actualizar.")
+
+    # Replicamos la validación del POST: si se está fijando tipo_alcance='CURSO', tiene que venir un id_curso (ya sea en este mismo payload o ya existente).
+    if datos.get("tipo_alcance") == "CURSO" and datos.get("id_curso") is None and "id_curso" not in datos:
         raise HTTPException(status_code=400, detail="Si el alcance es 'CURSO', debes especificar un id_curso.")
+
+    sets: list[str] = []
+    valores: list = []
+    contador = 1
+    for campo, valor in datos.items():
+        sets.append(f"{campo} = ${contador}")
+        valores.append(valor)
+        contador += 1
+
+    valores.append(id_excepcion)
+    query = f"UPDATE Excepciones_Calendario SET {', '.join(sets)} WHERE id_excepcion = ${contador};"
 
     try:
         async with app.state.pool.acquire() as conn:
-            result = await conn.execute(
-                """UPDATE Excepciones_Calendario
-                SET fecha = $2, id_curso = $3, motivo = $4, tipo_alcance = $5
-                WHERE id_excepcion = $1;
-                """,
-                id_excepcion,
-                payload.fecha,
-                payload.id_curso,
-                payload.motivo,
-                payload.tipo_alcance
-            )
+            result = await conn.execute(query, *valores)
         if result == "UPDATE 0":
             raise HTTPException(status_code=404, detail=f"Excepción con ID {id_excepcion} no encontrada.")
         return {"mensaje": f"Excepción con ID {id_excepcion} actualizada exitosamente."}
@@ -521,7 +551,7 @@ async def actualizar_excepcion(id_excepcion: int, payload: ExcepcionesCalendario
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.post("/inscripciones")
-async def inscribir_alumno(payload: InscripcionCreate) -> dict[str, str]:
+async def inscribir_alumno(payload: InscripcionCreate) -> dict:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -540,11 +570,13 @@ async def inscribir_alumno(payload: InscripcionCreate) -> dict[str, str]:
 				payload.fecha_inscripcion
 			)
 		return {"mensaje": f"Alumno con DNI {payload.dni_alumno} inscrito en curso ID {payload.id_curso} exitosamente."}
+	except asyncpg.UniqueViolationError as exc:
+		raise HTTPException(status_code=409, detail="Ese alumno ya está inscrito en ese curso para ese ciclo lectivo.") from exc
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.get("/inscripciones")
-async def listar_inscripciones() -> list[dict[str, str]]:
+async def listar_inscripciones() -> list[dict]:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
