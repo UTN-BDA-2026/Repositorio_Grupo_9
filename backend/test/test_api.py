@@ -40,7 +40,7 @@ def test_registrar_fichada_dni_inexistente():
 # 2. TESTS CRUD DE ALUMNOS
 # ==========================================
 
-def test_obtener_lista_alumnos():
+def test_obtener_lista_alumnos(client):
     """Verifica que el endpoint devuelva correctamente el listado de alumnos."""
     response = client.get("/alumnos")
     
@@ -49,7 +49,7 @@ def test_obtener_lista_alumnos():
     assert isinstance(data, list)
     assert len(data) > 0 # Como inyectamos 627 alumnos, la lista no debe estar vacía
 
-def test_obtener_alumno_por_dni():
+def test_obtener_alumno_por_dni(client):
     """Verifica la búsqueda de un alumno específico."""
     dni_prueba = 45359643 # DNI de Adriel
     response = client.get(f"/alumnos/{dni_prueba}")
@@ -59,7 +59,7 @@ def test_obtener_alumno_por_dni():
 
 # ==========================================
 
-def test_crear_alumno_nuevo():
+def test_crear_alumno_nuevo(client):
     """Prueba POST /alumnos (201 Created)"""
     payload = {
         "dni": 46000111,
@@ -75,7 +75,7 @@ def test_crear_alumno_nuevo():
     response = client.post("/alumnos", json=payload)
     assert response.status_code in [200, 201]
 
-def test_crear_alumno_dni_duplicado():
+def test_crear_alumno_dni_duplicado(client):
     """Prueba error 409 Conflict al repetir DNI"""
     payload = {
         "dni": 45142092, # Tu DNI ya existe en la BD
@@ -91,7 +91,7 @@ def test_crear_alumno_dni_duplicado():
     response = client.post("/alumnos", json=payload)
     assert response.status_code == 409 # Código HTTP para "Conflicto"
 
-def test_actualizar_alumno():
+def test_actualizar_alumno(client):
     """Prueba PUT /alumnos/{dni}"""
     response = client.put(
         "/alumnos/46000111", 
@@ -101,19 +101,19 @@ def test_actualizar_alumno():
 
 # ==========================================
 
-def test_obtener_cursos():
+def test_obtener_cursos(client):
     """Prueba GET /cursos"""
     response = client.get("/cursos")
     assert response.status_code == 200
     assert len(response.json()) >= 25 # Sabemos que generamos 25 cursos
 
-def test_obtener_curso_por_id():
+def test_obtener_curso_por_id(client):
     """Prueba GET /cursos/{id}"""
     response = client.get("/cursos/23") # El curso de 5to C de ustedes
     assert response.status_code == 200
     assert response.json()["id_curso"] == 23
 
-def test_actualizar_curso_invalido():
+def test_actualizar_curso_invalido(client):
     """Prueba 400 Bad Request enviando datos incorrectos"""
     response = client.put(
         "/cursos/999", 
@@ -123,13 +123,13 @@ def test_actualizar_curso_invalido():
 
 # ==========================================
 
-def test_obtener_asistencias_con_filtros():
+def test_obtener_asistencias_con_filtros(client):
     """Prueba GET /asistencias con query parameters"""
     response = client.get("/asistencias?fecha=2026-06-19&id_curso=23")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
-def test_justificar_asistencia():
+def test_justificar_asistencia(client):
     """Prueba PUT /asistencias/{id} para editar estado (ej: justificar falta)"""
     # Nota: Acá asumimos que el ID de asistencia 1 existe.
     # En un entorno real, primero harías un GET para obtener un ID válido.
@@ -142,7 +142,7 @@ def test_justificar_asistencia():
 
 # ==========================================
 
-def test_obtener_estadisticas():
+def test_obtener_estadisticas(client):
     """Prueba GET /estadisticas (KPIs)"""
     response = client.get("/estadisticas/asistencias")
     assert response.status_code == 200
@@ -154,13 +154,13 @@ def test_obtener_estadisticas():
     assert "tardanzas" in data
     assert "tasa" in data
 
-def test_eliminar_alumno():
+def test_eliminar_alumno(client):
     """Prueba DELETE /alumnos/{dni}"""
     # Usamos el DNI del alumno de prueba que creamos en el test de POST
     response = client.delete("/alumnos/46000111")
     assert response.status_code in [200, 204]
 
-def test_crear_curso_nuevo():
+def test_crear_curso_nuevo(client):
     """Prueba POST /cursos"""
     payload = {
         "id_curso": 26, # Creamos un curso extra
@@ -171,19 +171,19 @@ def test_crear_curso_nuevo():
     response = client.post("/cursos", json=payload)
     assert response.status_code in [200, 201]
 
-def test_obtener_asistencia_por_id():
+def test_obtener_asistencia_por_id(client):
     """Prueba GET /asistencias/{id}"""
     response = client.get("/asistencias/1")
     # Aceptamos 200 si existe, o 404 si el ID 1 no se generó en tu DB
     assert response.status_code in [200, 404]
 
-def test_obtener_excepciones():
+def test_obtener_excepciones(client):
     """Prueba GET /excepciones"""
     response = client.get("/excepciones")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
-def test_crear_excepcion():
+def test_crear_excepcion(client):
     """Prueba POST /excepciones"""
     payload = {
         "fecha": "2026-09-21",
@@ -193,7 +193,7 @@ def test_crear_excepcion():
     response = client.post("/excepciones", json=payload)
     assert response.status_code in [200, 201]
 
-def test_actualizar_excepcion():
+def test_actualizar_excepcion(client):
     """Prueba PUT /excepciones/{id}"""
     response = client.put(
         "/excepciones/1", 
@@ -201,18 +201,18 @@ def test_actualizar_excepcion():
     )
     assert response.status_code in [200, 404]
 
-def test_eliminar_excepcion():
+def test_eliminar_excepcion(client):
     """Prueba DELETE /excepciones/{id}"""
     response = client.delete("/excepciones/1")
     assert response.status_code in [200, 204, 404]
 
-def test_obtener_inscripciones():
+def test_obtener_inscripciones(client):
     """Prueba GET /inscripciones"""
     response = client.get("/inscripciones?ciclo_lectivo=2026")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
-def test_crear_inscripcion():
+def test_crear_inscripcion(client):
     """Prueba POST /inscripciones"""
     payload = {
         "dni_alumno": 45142092, # Tu DNI
