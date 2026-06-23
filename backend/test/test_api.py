@@ -1,4 +1,5 @@
 import pytest
+import datetime
 from fastapi.testclient import TestClient
 from backend.server_fastapi import app 
 
@@ -13,18 +14,72 @@ def client():
 # 1. TESTS DEL ESCÁNER (FICHADA)
 # ==========================================
 
-def test_registrar_fichada_exito(client):
-    # Prueba el "Happy Path": un alumno activo fichando en horario correcto.
-    payload = {
-        "dni": 45142092,  # Tu DNI de prueba (Franco)
-    }
-    response = client.post("/fichada", json=payload)
-    
-    # Dependiendo de cómo armaste tu endpoint, puede ser 200 o 201
-    assert response.status_code in [200, 201]
-    assert "estado" in response.json()
+DIAS_SEMANA = {0: "lunes", 1: "martes", 2: "miercoles", 3: "jueves", 4: "viernes"}
 
-def test_registrar_fichada_dni_inexistente():
+def test_registrar_fichada_exito(client):
+    """Crea un curso y un alumno de prueba con un horario que cubre todo el
+    día de hoy, para garantizar que la fichada sea exitosa sin depender de
+    la hora real en que se corra el test. Limpia todo lo que crea al final."""
+    hoy = datetime.date.today()
+    dia_nombre = DIAS_SEMANA.get(hoy.weekday())
+
+    if dia_nombre is None:
+        pytest.skip("No se toman asistencias los fines de semana; correr este test un día de semana.")
+
+    # Si hay una excepción de calendario GLOBAL hoy, fichar es imposible (correctamente) — saltamos el test en vez de hacerlo fallar.
+    excepciones = client.get("/excepciones").json()
+    if any(e.get("tipo_alcance") == "GLOBAL" and e.get("fecha") == hoy.isoformat() for e in excepciones):
+        pytest.skip("Hay una excepción de calendario GLOBAL hoy; no se puede fichar.")
+
+    id_curso_test = 9001
+    dni_test = 89000001
+
+    curso_payload = {
+        "id_curso": id_curso_test,
+        "anio": 1,
+        "division": "Z",
+        f"hora_entrada_maniana_{dia_nombre}": "00:00:00",
+        f"hora_salida_maniana_{dia_nombre}": "12:00:00",
+        f"hora_entrada_tarde_{dia_nombre}": "12:00:00",
+        f"hora_salida_tarde_{dia_nombre}": "23:59:59",
+    }
+    alumno_payload = {
+        "dni": dni_test,
+        "nombre": "Test",
+        "apellido": "Fichada",
+        "estado": "ACTIVO",
+        "fecha_nacimiento": "2010-01-01",
+        "sexo": "MASCULINO",
+        "nro_legajo": dni_test,
+        "fecha_ingreso": hoy.isoformat(),
+        "id_curso": id_curso_test,
+    }
+
+    curso_creado = False
+    alumno_creado = False
+    try:
+        resp_curso = client.post("/cursos", json=curso_payload)
+        assert resp_curso.status_code in [200, 201]
+        curso_creado = True
+
+        resp_alumno = client.post("/alumnos", json=alumno_payload)
+        assert resp_alumno.status_code in [200, 201]
+        alumno_creado = True
+
+        response = client.post("/fichada", json={"dni": dni_test})
+        assert response.status_code == 200
+        data = response.json()
+        assert "estado" in data
+        assert data["estado"] in ("PRESENTE", "TARDANZA")
+    finally:
+        # Limpieza: borrar el alumno borra en cascada su fichada (ON DELETE
+        # CASCADE en Asistencias.dni_alumno), y después borramos el curso.
+        if alumno_creado:
+            client.delete(f"/alumnos/{dni_test}")
+        if curso_creado:
+            client.delete(f"/cursos/{id_curso_test}")
+
+def test_registrar_fichada_dni_inexistente(client):
     # Prueba la validación cuando el escáner lee un DNI que no está en la BD.
     payload = {
         "dni": 99999999, 
@@ -84,7 +139,7 @@ def test_crear_alumno_dni_duplicado(client):
         "sexo": "MASCULINO",
         "nro_legajo": 50001,
         "fecha_ingreso": "2026-03-01",
-        "id_curso": 1  # FIX: antes decía "curso_actual", que no existe en AlumnoCreate
+        "id_curso": 1
     }
     response = client.post("/alumnos", json=payload)
     assert response.status_code == 409 # Código HTTP para "Conflicto"
@@ -146,8 +201,7 @@ def test_obtener_estadisticas(client):
     assert response.status_code == 200
     
     data = response.json()
-    # FIX: ajustado a las claves reales que devuelve el endpoint.
-    # Con esto alcanza para exponer los datos en el frontend.
+    # Ajustado a las claves reales que devuelve el endpoint.
     assert "total_asistencias" in data
     assert "asistencias_presentes" in data
     assert "asistencias_ausentes" in data
@@ -167,8 +221,12 @@ def test_crear_curso_nuevo(client):
         "division": "A"
         # Los horarios pueden ir nulos según tu esquema
     }
-    response = client.post("/cursos", json=payload)
-    assert response.status_code in [200, 201]
+    try:
+        response = client.post("/cursos", json=payload)
+        assert response.status_code in [200, 201]
+    finally:
+        # Limpieza: borramos el curso de prueba para que la próxima corrida no choque con un 409.
+        client.delete(f"/cursos/{payload['id_curso']}")
 
 def test_obtener_asistencia_por_id(client):
     """Prueba GET /asistencias/{id}"""
@@ -219,4 +277,11 @@ def test_crear_inscripcion(client):
         "ciclo_lectivo": 2027, # Simulamos inscribirte para el año que viene
     }
     response = client.post("/inscripciones", json=payload)
-    assert response.status_code in [200, 201]
+    try:
+        assert response.status_code in [200, 201]
+    finally:
+        # Limpieza: si la inscripción se creó, la borramos para que la próxima corrida no choque con un 409 (UNIQUE dni_alumno+id_curso+ciclo_lectivo).
+        if response.status_code in [200, 201]:
+            id_inscripcion = response.json().get("id_inscripcion")
+            if id_inscripcion is not None:
+                client.delete(f"/inscripciones/{id_inscripcion}")

@@ -70,13 +70,29 @@ async def registrar_fichada(payload: FichadaRegistrada) -> dict:
 
 	try:
 		async with app.state.pool.acquire() as conn:
-			resultado = await conn.fetchval(
-				"SELECT registrar_fichada($1);",
+			# FIX: SELECT * FROM ... (no SELECT ...) + fetchrow (no fetchval), para poder leer cada columna de la tabla devuelta por separado.
+			resultado = await conn.fetchrow(
+				"SELECT * FROM registrar_fichada($1);",
 				payload.dni
 			)
-		return {"resultado": str(resultado)}
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
+
+	if resultado["success"]:
+		return {
+			"estado": resultado["estado"],
+			"id_asistencia": resultado["id_asistencia"],
+			"mensaje": resultado["mensaje"],
+		}
+
+	# La función puede fallar por varias razones de negocio (inactivo, fin de
+	# semana, sin horario, excepción de calendario, anti-rebote...).
+	# Solo "no registrado" mapea a 404; el resto son reglas de negocio -> 400.
+
+	if resultado["mensaje"] == "El alumno no está registrado":
+		raise HTTPException(status_code=404, detail="Alumno no encontrado")
+
+	raise HTTPException(status_code=400, detail=resultado["mensaje"])
 
 @app.post("/alumnos")
 async def crear_alumno(payload: AlumnoCreate) -> dict:
@@ -100,7 +116,7 @@ async def crear_alumno(payload: AlumnoCreate) -> dict:
 				payload.sexo,
 				payload.nro_legajo,
 				payload.fecha_ingreso,
-				payload.id_curso
+				payload.id_curso  # FIX: antes decía payload.curso_id (no existía)
 			)
 		return {"mensaje": "El Alumno se acaba de añadir al sistema exitosamente.", "dni": payload.dni}
 	# FIX: capturamos el error específico de DNI/legajo duplicado ANTES del genérico, para devolver 409 (Conflicto) en vez de 500.
@@ -513,7 +529,7 @@ async def eliminar_excepcion(id_excepcion: int) -> dict:
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
-# FIX: ahora recibe ExcepcionUpdate (campos opcionales) y construye el UPDATE  dinámicamente, tocando solo las columnas que el cliente realmente mandó.
+# FIX: ahora recibe ExcepcionUpdate (campos opcionales) y construye el UPDATE dinámicamente, tocando solo las columnas que el cliente realmente mandó.
 @app.put("/excepciones/{id_excepcion}")
 async def actualizar_excepcion(id_excepcion: int, payload: ExcepcionUpdate) -> dict:
     if app.state.pool is None:
@@ -526,7 +542,8 @@ async def actualizar_excepcion(id_excepcion: int, payload: ExcepcionUpdate) -> d
     if not datos:
         raise HTTPException(status_code=400, detail="No se enviaron campos para actualizar.")
 
-    # Replicamos la validación del POST: si se está fijando tipo_alcance='CURSO', tiene que venir un id_curso (ya sea en este mismo payload o ya existente).
+    # Replicamos la validación del POST: si se está fijando tipo_alcance='CURSO',
+    # tiene que venir un id_curso (ya sea en este mismo payload o ya existente).
     if datos.get("tipo_alcance") == "CURSO" and datos.get("id_curso") is None and "id_curso" not in datos:
         raise HTTPException(status_code=400, detail="Si el alcance es 'CURSO', debes especificar un id_curso.")
 
@@ -560,18 +577,46 @@ async def inscribir_alumno(payload: InscripcionCreate) -> dict:
 
 	try:
 		async with app.state.pool.acquire() as conn:
-			await conn.execute(
+			# FIX: agregamos RETURNING id_inscripcion para poder devolver el ID
+			# generado (útil para que el cliente, o los tests, puedan borrarlo después).
+			id_inscripcion = await conn.fetchval(
 				"""INSERT INTO Inscripciones (dni_alumno, id_curso, ciclo_lectivo, fecha_inscripcion)
-				VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE));
+				VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE))
+				RETURNING id_inscripcion;
 				""",
 				payload.dni_alumno,
 				payload.id_curso,
 				payload.ciclo_lectivo,
 				payload.fecha_inscripcion
 			)
-		return {"mensaje": f"Alumno con DNI {payload.dni_alumno} inscrito en curso ID {payload.id_curso} exitosamente."}
+		return {
+			"mensaje": f"Alumno con DNI {payload.dni_alumno} inscrito en curso ID {payload.id_curso} exitosamente.",
+			"id_inscripcion": id_inscripcion,
+		}
 	except asyncpg.UniqueViolationError as exc:
 		raise HTTPException(status_code=409, detail="Ese alumno ya está inscrito en ese curso para ese ciclo lectivo.") from exc
+	except asyncpg.PostgresError as exc:
+		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
+
+# FIX: faltaba este endpoint. Ahora Inscripciones tiene CRUD completo, igual que el resto de los recursos.
+@app.delete("/inscripciones/{id_inscripcion}")
+async def eliminar_inscripcion(id_inscripcion: int) -> dict:
+	if app.state.pool is None:
+		raise HTTPException(
+			status_code=503,
+			detail="DATABASE_URL no configurada. Completa el archivo .env.",
+		)
+
+	try:
+		async with app.state.pool.acquire() as conn:
+			result = await conn.execute(
+				"""DELETE FROM Inscripciones WHERE id_inscripcion = $1;
+				""",
+				id_inscripcion
+			)
+		if result == "DELETE 0":
+			raise HTTPException(status_code=404, detail=f"Inscripción con ID {id_inscripcion} no encontrada.")
+		return {"mensaje": f"Inscripción con ID {id_inscripcion} eliminada exitosamente."}
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 

@@ -159,7 +159,9 @@ BEGIN
   -- ========================================================================
   -- 2️⃣ VALIDACIÓN: ¿EXISTE EL ALUMNO?
   -- ========================================================================
-  SELECT estado, curso_actual 
+  -- FIX: calificamos "estado" y "curso_actual" con Alumnos. para evitar la
+  -- ambigüedad con la variable de salida "estado" de RETURNS TABLE.
+  SELECT Alumnos.estado, Alumnos.curso_actual 
     INTO v_alumno_estado, v_alumno_curso
     FROM Alumnos 
    WHERE dni = p_dni;
