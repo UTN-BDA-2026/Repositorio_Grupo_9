@@ -1,0 +1,323 @@
+:root {
+  /* --- Paleta: panel de portería + tinta de sello --- */
+  --bg-0: #0d1014;
+  --bg-1: #161a20;
+  --panel: #1b2027;
+  --panel-edge: #2a313b;
+  --paper: #ece6d8;
+  --paper-dim: #b8b2a3;
+
+  --ink-blue: #5b8fb0;
+  --ink-blue-dim: rgba(91, 143, 176, 0.16);
+  --stamp-green: #4f8a5e;
+  --stamp-green-bg: rgba(79, 138, 94, 0.14);
+  --stamp-red: #b3473d;
+  --stamp-red-bg: rgba(179, 71, 61, 0.14);
+  --stamp-amber: #b8843a;
+  --stamp-amber-bg: rgba(184, 132, 58, 0.14);
+
+  --font-display: "Archivo Expanded", "Archivo", sans-serif;
+  --font-body: "Archivo", system-ui, sans-serif;
+  --font-mono: "Roboto Mono", "SFMono-Regular", monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 18% 14%, rgba(91, 143, 176, 0.07), transparent 40%),
+    radial-gradient(circle at 84% 88%, rgba(184, 132, 58, 0.05), transparent 45%),
+    var(--bg-0);
+  font-family: var(--font-body);
+  color: var(--paper);
+  overflow: hidden;
+}
+
+.scene {
+  width: min(94vw, 560px);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ============ CABECERA ============ */
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px 14px;
+}
+
+.masthead__id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.masthead__chip {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--ink-blue);
+  box-shadow: 0 0 0 3px var(--ink-blue-dim);
+}
+
+.masthead__label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--paper-dim);
+}
+
+.masthead__clock {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--paper-dim);
+  letter-spacing: 0.04em;
+}
+
+/* ============ TERMINAL (card principal) ============ */
+.terminal {
+  position: relative;
+  min-height: 460px;
+  background:
+    linear-gradient(165deg, var(--panel) 0%, var(--bg-1) 100%);
+  border: 1px solid var(--panel-edge);
+  border-radius: 18px;
+  box-shadow:
+    0 30px 70px -20px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 36px;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* Textura sutil tipo trama de papel oficial */
+.terminal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 18px 18px;
+  pointer-events: none;
+}
+
+.state {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 0 20px;
+  opacity: 0;
+  transform: scale(0.94) translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.38s cubic-bezier(.22,.8,.32,1), transform 0.38s cubic-bezier(.22,.8,.32,1);
+}
+
+.state.is-active {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-blue);
+}
+
+.headline {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--paper);
+}
+
+.subtitle {
+  font-size: 0.96rem;
+  color: var(--paper-dim);
+  max-width: 320px;
+}
+
+.subtitle--mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  font-size: 0.88rem;
+}
+
+/* ============ ESTADO: ESPERA — marco de escaneo ============ */
+.scanframe {
+  position: relative;
+  width: 132px;
+  height: 88px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-blue);
+}
+
+.scanframe__icon {
+  width: 60px;
+  height: 40px;
+  opacity: 0.9;
+}
+
+.scanframe__corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--ink-blue);
+  opacity: 0.85;
+}
+.scanframe__corner--tl { top: 0; left: 0; border-right: none; border-bottom: none; border-radius: 4px 0 0 0; }
+.scanframe__corner--tr { top: 0; right: 0; border-left: none; border-bottom: none; border-radius: 0 4px 0 0; }
+.scanframe__corner--bl { bottom: 0; left: 0; border-right: none; border-top: none; border-radius: 0 0 0 4px; }
+.scanframe__corner--br { bottom: 0; right: 0; border-left: none; border-top: none; border-radius: 0 0 4px 0; }
+
+.scanframe__beam {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ink-blue), transparent);
+  box-shadow: 0 0 8px 1px var(--ink-blue);
+  animation: sweep 2.4s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  0%   { top: 6px;  opacity: 0; }
+  12%  { opacity: 1; }
+  50%  { top: 82px; opacity: 1; }
+  88%  { opacity: 1; }
+  100% { top: 6px;  opacity: 0; }
+}
+
+/* ============ ESTADO: ÉXITO / ERROR — sello ============ */
+.stamp {
+  position: relative;
+  width: 108px;
+  height: 108px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--stamp-green);
+  margin-bottom: 4px;
+  animation: stamp-hit 0.42s cubic-bezier(.2,1.6,.4,1);
+}
+
+.stamp--error { color: var(--stamp-red); }
+
+@keyframes stamp-hit {
+  0%   { transform: scale(1.7) rotate(-14deg); opacity: 0; }
+  55%  { transform: scale(0.92) rotate(2deg);  opacity: 1; }
+  100% { transform: scale(1) rotate(-3deg); }
+}
+
+.stamp__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.stamp__check {
+  width: 46px;
+  height: 46px;
+}
+
+.stamp__check-path {
+  stroke-dasharray: 46;
+  stroke-dashoffset: 46;
+  animation: draw-check 0.45s ease forwards 0.18s;
+}
+
+@keyframes draw-check {
+  to { stroke-dashoffset: 0; }
+}
+
+.eyebrow--success { color: var(--stamp-green); }
+.eyebrow--error { color: var(--stamp-red); }
+.headline--success { color: var(--paper); }
+.headline--error { color: var(--paper); }
+
+/* Variante TARDANZA: mismo sello "aprobado", tinta ámbar */
+.state--success.state--tardanza .stamp { color: var(--stamp-amber); }
+.state--success.state--tardanza .eyebrow { color: var(--stamp-amber); }
+
+/* ============ BARRA DE ESTADO ============ */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  padding-top: 16px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  color: var(--paper-dim);
+}
+
+.statusbar__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--stamp-green);
+  box-shadow: 0 0 0 3px var(--stamp-green-bg);
+}
+
+.statusbar__dot.is-offline {
+  background: var(--stamp-red);
+  box-shadow: 0 0 0 3px var(--stamp-red-bg);
+}
+
+/* ============ Input oculto (captura del escáner) ============ */
+#scanner-input {
+  position: absolute;
+  top: -100px;
+  left: -100px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ============ Shake en error ============ */
+.terminal.shake { animation: terminal-shake 0.4s ease; }
+
+@keyframes terminal-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
+
+@media (max-width: 480px) {
+  .terminal { min-height: 400px; padding: 40px 22px; }
+  .headline { font-size: 1.55rem; }
+  .masthead__label { font-size: 0.62rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanframe__beam,
+  .stamp,
+  .stamp__check-path,
+  .terminal.shake {
+    animation: none !important;
+  }
+}
