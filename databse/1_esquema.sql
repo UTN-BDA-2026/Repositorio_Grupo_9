@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS  Asistencias (
     id_asistencia BIGSERIAL,
     dni_alumno INT NOT NULL,
     fecha DATE NOT NULL DEFAULT CURRENT_DATE,
-    hora_entrada TIME NOT NULL DEFAULT CURRENT_TIME,
+    hora_entrada TIME, -- NULL para AUSENTE (no hubo entrada real); siempre explícita para PRESENTE/TARDANZA
     estado VARCHAR(8) NOT NULL CHECK (estado IN ('PRESENTE', 'AUSENTE', 'TARDANZA')),
     justificacion TEXT, -- Opcional, para explicar ausencias o tardanzas
     turno VARCHAR(6) NOT NULL CHECK (turno IN ('MAÑANA', 'TARDE')),

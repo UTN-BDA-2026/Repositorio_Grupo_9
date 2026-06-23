@@ -10,10 +10,12 @@ from .models import (
 	CursoCreate,
 	AlumnoCreate,
 	AlumnoUpdate,
+	AsistenciaCreate,
 	AsistenciaUpdate,
 	ExcepcionesCalendarioCreate,
 	ExcepcionUpdate,
 	InscripcionCreate,
+	CerrarTurnoPayload
 )
 from datetime import date,time
 
@@ -386,6 +388,54 @@ async def actualizar_curso(id_curso: int, payload: CursoCreate) -> dict:
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
+@app.post("/asistencias")
+async def crear_asistencia_manual(payload: AsistenciaCreate) -> dict:
+	if app.state.pool is None:
+		raise HTTPException(
+			status_code=503,
+			detail="DATABASE_URL no configurada. Completa el archivo .env.",
+		)
+
+	# Validaciones de forma (las de negocio más profundas, como duplicados,
+	# alumno inactivo o excepción de calendario, las hace trg_validar_asistencia
+	# en la base — acá solo evitamos mandar datos con forma inválida).
+	estado = payload.estado.upper()
+	turno = payload.turno.upper()
+
+	if estado not in ("PRESENTE", "AUSENTE", "TARDANZA"):
+		raise HTTPException(status_code=422, detail="El estado debe ser PRESENTE, AUSENTE o TARDANZA.")
+	if turno not in ("MAÑANA", "TARDE"):
+		raise HTTPException(status_code=422, detail="El turno debe ser MAÑANA o TARDE.")
+	if estado != "AUSENTE" and payload.hora_entrada is None:
+		raise HTTPException(status_code=422, detail="La hora de entrada es obligatoria salvo para el estado AUSENTE.")
+
+	try:
+		async with app.state.pool.acquire() as conn:
+			id_asistencia = await conn.fetchval(
+				"""INSERT INTO Asistencias (dni_alumno, fecha, hora_entrada, estado, turno, justificacion)
+				VALUES ($1, $2, $3, $4, $5, $6)
+				RETURNING id_asistencia;
+				""",
+				payload.dni_alumno,
+				payload.fecha,
+				payload.hora_entrada,
+				estado,
+				turno,
+				payload.justificacion,
+			)
+		return {
+			"mensaje": "Asistencia registrada manualmente con éxito.",
+			"id_asistencia": id_asistencia,
+		}
+	except asyncpg.RaiseError as exc:
+		# trg_validar_asistencia lanza RAISE EXCEPTION (alumno inactivo,
+		# duplicado del mismo dni+fecha+turno, o excepción de calendario).
+		# Devolvemos 409 con el mensaje tal cual lo arma el trigger, para que
+		# el frontend lo muestre directo sin reinterpretarlo.
+		raise HTTPException(status_code=409, detail=str(exc)) from exc
+	except asyncpg.PostgresError as exc:
+		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
+
 @app.put("/asistencias/{id_asistencia}")
 async def actualizar_asistencia(id_asistencia: int, payload: AsistenciaUpdate) -> dict:
 	if app.state.pool is None:
@@ -490,6 +540,24 @@ async def crear_excepcion(payload: ExcepcionesCalendarioCreate) -> dict:
     except asyncpg.PostgresError as exc:
         raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
+@app.post("/cerrar-turno")
+async def cerrar_turno(payload: CerrarTurnoPayload) -> dict:
+    if app.state.pool is None:
+        raise HTTPException(status_code=503, detail="Base de datos no conectada")
+
+    try:
+        async with app.state.pool.acquire() as conn:
+            # Llamamos al procedimiento almacenado que armaron en la Fase 1
+            resultado = await conn.fetchrow(
+                "SELECT * FROM registrar_ausentes_cierre_turno($1);",
+                payload.turno.upper()
+            )
+        return {
+            "mensaje": resultado["mensaje"],
+            "total_ausentes_registrados": resultado["total_registrados"]
+        }
+    except asyncpg.PostgresError as exc:
+        raise HTTPException(status_code=500, detail=f"Error al cerrar turno: {exc}")
 
 @app.get("/excepciones")
 async def listar_excepciones() -> list[dict]:

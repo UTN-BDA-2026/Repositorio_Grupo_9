@@ -65,6 +65,19 @@ class AsistenciaUpdate(BaseModel):
     justificacion: str | None = None
     hora_entrada: time 
 
+# Modelo para POST /asistencias: carga manual de un registro completo.
+# A diferencia de /fichada (que solo recibe el DNI y deja que el procedimiento
+# almacenado decida fecha/hora/estado/turno), este endpoint es para cuando el
+# preceptor necesita cargar o corregir una asistencia a mano, indicando todos
+# los datos explícitamente.
+class AsistenciaCreate(BaseModel):
+    dni_alumno: int = Field(..., ge=1)
+    fecha: date
+    hora_entrada: time | None = None  # None solo es válido si estado == 'AUSENTE'
+    estado: str  # 'PRESENTE' | 'TARDANZA' | 'AUSENTE'
+    turno: str  # 'MAÑANA' | 'TARDE'
+    justificacion: str | None = None
+
 class ExcepcionesCalendarioCreate(BaseModel):
     fecha: date
     motivo: str
@@ -83,3 +96,6 @@ class InscripcionCreate(BaseModel):
     id_curso: int = Field(..., ge=1)
     ciclo_lectivo: int = Field(..., ge=1)
     fecha_inscripcion: date | None = None
+
+class CerrarTurnoPayload(BaseModel):
+    turno: str # Debe ser "MAÑANA" o "TARDE"
