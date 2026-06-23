@@ -18,6 +18,7 @@ from .models import (
 	CerrarTurnoPayload
 )
 from datetime import date,time
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
@@ -46,13 +47,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Asistencia API", version="1.0.0", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+    ],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type"],
+)
+
 # Para que los endpoints en tests no fallen si el lifespan no inicializa pool
 @app.middleware("http")
 async def ensure_pool_exists(request, call_next):
     if not hasattr(app.state, "pool"):
         app.state.pool = None
     return await call_next(request)
-
 
 
 @app.get("/health")
