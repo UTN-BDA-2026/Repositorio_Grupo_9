@@ -48,6 +48,18 @@ class AlumnoCreate(BaseModel):
     fecha_ingreso: date | None = None
     id_curso: int = Field(..., ge=1)
 
+# Modelo para actualizaciones PARCIALES (PUT /alumnos/{dni}).
+# Todos los campos son opcionales: el cliente solo manda lo que quiere cambiar.
+class AlumnoUpdate(BaseModel):
+    nombre: str | None = None
+    apellido: str | None = None
+    estado: str | None = None
+    fecha_nacimiento: date | None = None
+    sexo: str | None = None
+    nro_legajo: int | None = Field(None, ge=1)
+    fecha_ingreso: date | None = None
+    id_curso: int | None = Field(None, ge=1)
+
 class AsistenciaUpdate(BaseModel):
     estado: str
     justificacion: str | None = None
@@ -58,6 +70,13 @@ class ExcepcionesCalendarioCreate(BaseModel):
     motivo: str
     tipo_alcance: str  # Espera 'GLOBAL' o 'CURSO'
     id_curso: int | None = None  # Permite None para feriados globales
+
+# Modelo para actualizaciones PARCIALES (PUT /excepciones/{id}).
+class ExcepcionUpdate(BaseModel):
+    fecha: date | None = None
+    motivo: str | None = None
+    tipo_alcance: str | None = None
+    id_curso: int | None = None
 
 class InscripcionCreate(BaseModel):
     dni_alumno: int = Field(..., ge=1)
