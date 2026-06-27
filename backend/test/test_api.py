@@ -152,6 +152,15 @@ def test_actualizar_alumno(client):
     )
     assert response.status_code == 200
 
+
+def test_actualizar_alumno_rechaza_campo_no_permitido(client):
+    """Prueba que los campos inesperados sean rechazados por validación."""
+    response = client.put(
+        "/alumnos/45359643",
+        json={"estado": "INACTIVO", "campo_invalido": "x"}
+    )
+    assert response.status_code == 422
+
 # ==========================================
 
 def test_obtener_cursos(client):

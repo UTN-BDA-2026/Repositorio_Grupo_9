@@ -215,14 +215,25 @@ async def actualizar_alumno(dni: int, payload: AlumnoUpdate) -> dict:
 	if not datos:
 		raise HTTPException(status_code=400, detail="No se enviaron campos para actualizar.")
 
-	# Mapeo de nombre de campo del modelo -> nombre real de columna en la DB
-	columnas = {"id_curso": "curso_actual"}
+	# Mapeo explícito de campos permitidos -> columnas reales de la DB.
+	columnas = {
+		"nombre": "nombre",
+		"apellido": "apellido",
+		"estado": "estado",
+		"fecha_nacimiento": "fecha_nacimiento",
+		"sexo": "sexo",
+		"nro_legajo": "nro_legajo",
+		"fecha_ingreso": "fecha_ingreso",
+		"id_curso": "curso_actual",
+	}
 
 	sets: list[str] = []
 	valores: list = []
 	contador = 1
 	for campo, valor in datos.items():
-		columna = columnas.get(campo, campo)
+		if campo not in columnas:
+			raise HTTPException(status_code=400, detail=f"Campo no permitido para actualización: {campo}")
+		columna = columnas[campo]
 		sets.append(f"{columna} = ${contador}")
 		valores.append(valor)
 		contador += 1
@@ -625,11 +636,21 @@ async def actualizar_excepcion(id_excepcion: int, payload: ExcepcionUpdate) -> d
     if datos.get("tipo_alcance") == "CURSO" and datos.get("id_curso") is None and "id_curso" not in datos:
         raise HTTPException(status_code=400, detail="Si el alcance es 'CURSO', debes especificar un id_curso.")
 
+    columnas_permitidas = {
+        "fecha": "fecha",
+        "motivo": "motivo",
+        "tipo_alcance": "tipo_alcance",
+        "id_curso": "id_curso",
+    }
+
     sets: list[str] = []
     valores: list = []
     contador = 1
     for campo, valor in datos.items():
-        sets.append(f"{campo} = ${contador}")
+        if campo not in columnas_permitidas:
+            raise HTTPException(status_code=400, detail=f"Campo no permitido para actualización: {campo}")
+        columna = columnas_permitidas[campo]
+        sets.append(f"{columna} = ${contador}")
         valores.append(valor)
         contador += 1
 
