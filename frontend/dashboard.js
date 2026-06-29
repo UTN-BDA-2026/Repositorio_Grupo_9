@@ -111,9 +111,12 @@ const api = {
   },
 
   async alumnosDeCurso(idCurso) {
-    const res = await fetch(`${API_BASE}/cursos/${idCurso}/alumnos`);
+    // El endpoint /cursos/{id}/alumnos no existe en el servidor.
+    // Traemos el padrón completo y filtramos por curso_actual client-side.
+    const res = await fetch(`${API_BASE}/alumnos`);
     if (!res.ok) throw new Error(await extractError(res));
-    return res.json();
+    const todos = await res.json();
+    return todos.filter((a) => a.curso_actual === idCurso);
   },
 
   async alumnos() {
@@ -125,9 +128,35 @@ const api = {
   },
 
   async promedioAlumno(dni) {
-    const res = await fetch(`${API_BASE}/alumnos/${dni}/promedio`);
+    // El endpoint /alumnos/{dni}/promedio no existe en el servidor.
+    // Usamos GET /asistencias?alumno_dni={dni} (que sí existe) y calculamos
+    // los ciclos lectivos client-side agrupando por año de fecha.
+    const res = await fetch(`${API_BASE}/asistencias?alumno_dni=${dni}`);
     if (!res.ok) throw new Error(await extractError(res));
-    return res.json();
+    const asistencias = await res.json();
+
+    // Agrupar por año (= ciclo lectivo)
+    const porAnio = {};
+    asistencias.forEach((a) => {
+      const anio = String(a.fecha).slice(0, 4);
+      if (!porAnio[anio]) porAnio[anio] = { presentes: 0, ausentes: 0, tardanzas: 0 };
+      if (a.estado === "PRESENTE")  porAnio[anio].presentes++;
+      else if (a.estado === "AUSENTE")  porAnio[anio].ausentes++;
+      else if (a.estado === "TARDANZA") porAnio[anio].tardanzas++;
+    });
+
+    const ciclos = Object.keys(porAnio)
+      .sort((a, b) => b - a) // más reciente primero
+      .map((anio) => {
+        const { presentes, ausentes, tardanzas } = porAnio[anio];
+        const total = presentes + ausentes + tardanzas;
+        const porcentaje_asistencia = total > 0
+          ? Math.round(((presentes + tardanzas) / total) * 100)
+          : 0;
+        return { ciclo_lectivo: Number(anio), presentes, ausentes, tardanzas, total, porcentaje_asistencia };
+      });
+
+    return { ciclos };
   },
 
   async asistencias({ fecha, turno }) {
