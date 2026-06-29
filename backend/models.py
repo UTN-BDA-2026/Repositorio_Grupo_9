@@ -4,18 +4,15 @@ from contextlib import asynccontextmanager
 import asyncpg
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 from datetime import date,time
 
 load_dotenv()
 
-class StrictBaseModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-class FichadaRegistrada(StrictBaseModel):
+class FichadaRegistrada(BaseModel):
 	dni: int = Field(..., ge=1)
 
-class CursoCreate(StrictBaseModel):
+class CursoCreate(BaseModel):
     id_curso: int = Field(..., ge=1)
     anio: int = Field(..., ge=1)
     division: str
@@ -40,7 +37,7 @@ class CursoCreate(StrictBaseModel):
     hora_entrada_tarde_viernes :time | None = None
     hora_salida_tarde_viernes :time | None = None
 
-class AlumnoCreate(StrictBaseModel):
+class AlumnoCreate(BaseModel):
     dni: int = Field(..., ge=1)
     nombre: str
     apellido: str
@@ -53,7 +50,7 @@ class AlumnoCreate(StrictBaseModel):
 
 # Modelo para actualizaciones PARCIALES (PUT /alumnos/{dni}).
 # Todos los campos son opcionales: el cliente solo manda lo que quiere cambiar.
-class AlumnoUpdate(StrictBaseModel):
+class AlumnoUpdate(BaseModel):
     nombre: str | None = None
     apellido: str | None = None
     estado: str | None = None
@@ -63,7 +60,7 @@ class AlumnoUpdate(StrictBaseModel):
     fecha_ingreso: date | None = None
     id_curso: int | None = Field(None, ge=1)
 
-class AsistenciaUpdate(StrictBaseModel):
+class AsistenciaUpdate(BaseModel):
     estado: str
     justificacion: str | None = None
     hora_entrada: time 
@@ -73,7 +70,7 @@ class AsistenciaUpdate(StrictBaseModel):
 # almacenado decida fecha/hora/estado/turno), este endpoint es para cuando el
 # preceptor necesita cargar o corregir una asistencia a mano, indicando todos
 # los datos explícitamente.
-class AsistenciaCreate(StrictBaseModel):
+class AsistenciaCreate(BaseModel):
     dni_alumno: int = Field(..., ge=1)
     fecha: date
     hora_entrada: time | None = None  # None solo es válido si estado == 'AUSENTE'
@@ -81,24 +78,24 @@ class AsistenciaCreate(StrictBaseModel):
     turno: str  # 'MAÑANA' | 'TARDE'
     justificacion: str | None = None
 
-class ExcepcionesCalendarioCreate(StrictBaseModel):
+class ExcepcionesCalendarioCreate(BaseModel):
     fecha: date
     motivo: str
     tipo_alcance: str  # Espera 'GLOBAL' o 'CURSO'
     id_curso: int | None = None  # Permite None para feriados globales
 
 # Modelo para actualizaciones PARCIALES (PUT /excepciones/{id}).
-class ExcepcionUpdate(StrictBaseModel):
+class ExcepcionUpdate(BaseModel):
     fecha: date | None = None
     motivo: str | None = None
     tipo_alcance: str | None = None
     id_curso: int | None = None
 
-class InscripcionCreate(StrictBaseModel):
+class InscripcionCreate(BaseModel):
     dni_alumno: int = Field(..., ge=1)
     id_curso: int = Field(..., ge=1)
     ciclo_lectivo: int = Field(..., ge=1)
     fecha_inscripcion: date | None = None
 
-class CerrarTurnoPayload(StrictBaseModel):
+class CerrarTurnoPayload(BaseModel):
     turno: str # Debe ser "MAÑANA" o "TARDE"
