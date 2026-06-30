@@ -14,8 +14,10 @@ const state = {
     fecha: todayISO(),
     turno: "MAÑANA",
     idCurso: null,
+    busqueda: "",        // DNI o legajo, filtra la tabla del Dashboard
   },
   filaEnEdicion: null,  // referencia a la fila combinada que se está justificando
+  turnoACerrar: null,   // turno fijado por el botón clickeado (Mañana / Tarde)
 };
 
 function todayISO() {
@@ -31,13 +33,17 @@ const dom = {
   kpiAusentes: document.getElementById("kpi-ausentes"),
   kpiTardanzas: document.getElementById("kpi-tardanzas"),
   kpiTotal: document.getElementById("kpi-total"),
+  kpiToggleHistorico: document.getElementById("kpi-toggle-historico"),
+  kpiScopeLabel: document.getElementById("kpi-scope-label"),
 
+  filtroBusqueda: document.getElementById("filtro-busqueda"),
   filtroFecha: document.getElementById("filtro-fecha"),
   filtroTurno: document.getElementById("filtro-turno"),
   filtroCurso: document.getElementById("filtro-curso"),
   btnAplicarFiltros: document.getElementById("btn-aplicar-filtros"),
   btnCargaManual: document.getElementById("btn-carga-manual"),
-  btnCerrarTurno: document.getElementById("btn-cerrar-turno"),
+  cerrarTurnoGroup: document.getElementById("cerrar-turno-group"),
+  btnsCerrarTurno: document.querySelectorAll(".btn-cerrar-turno"),
 
   tablaBody: document.getElementById("tabla-body"),
   tablaResumen: document.getElementById("tabla-resumen"),
@@ -81,8 +87,13 @@ const dom = {
 // API CLIENT — todas las llamadas a FastAPI viven acá
 // =====================================================================
 const api = {
-  async estadisticas() {
-    const res = await fetch(`${API_BASE}/estadisticas/asistencias`);
+  async estadisticas({ fecha, turno, idCurso } = {}) {
+    const params = new URLSearchParams();
+    if (fecha) params.set("fecha", fecha);
+    if (turno) params.set("turno", turno);
+    if (idCurso) params.set("id_curso", idCurso);
+    const qs = params.toString();
+    const res = await fetch(`${API_BASE}/estadisticas/asistencias${qs ? `?${qs}` : ""}`);
     if (!res.ok) throw new Error(await extractError(res));
     return res.json();
   },
@@ -93,12 +104,59 @@ const api = {
     return res.json();
   },
 
+  async cursoDetalle(idCurso) {
+    const res = await fetch(`${API_BASE}/cursos/${idCurso}`);
+    if (!res.ok) throw new Error(await extractError(res));
+    return res.json();
+  },
+
+  async alumnosDeCurso(idCurso) {
+    // El endpoint /cursos/{id}/alumnos no existe en el servidor.
+    // Traemos el padrón completo y filtramos por curso_actual client-side.
+    const res = await fetch(`${API_BASE}/alumnos`);
+    if (!res.ok) throw new Error(await extractError(res));
+    const todos = await res.json();
+    return todos.filter((a) => a.curso_actual === idCurso);
+  },
+
   async alumnos() {
-    // GET /alumnos no soporta filtro por curso todavía (solo nombre/apellido),
+    // GET /alumnos no soporta filtro por curso todavía (solo nombre/apellido/dni/legajo),
     // así que traemos todo y filtramos curso_actual en el cliente.
     const res = await fetch(`${API_BASE}/alumnos`);
     if (!res.ok) throw new Error(await extractError(res));
     return res.json();
+  },
+
+  async promedioAlumno(dni) {
+    // El endpoint /alumnos/{dni}/promedio no existe en el servidor.
+    // Usamos GET /asistencias?alumno_dni={dni} (que sí existe) y calculamos
+    // los ciclos lectivos client-side agrupando por año de fecha.
+    const res = await fetch(`${API_BASE}/asistencias?alumno_dni=${dni}`);
+    if (!res.ok) throw new Error(await extractError(res));
+    const asistencias = await res.json();
+
+    // Agrupar por año (= ciclo lectivo)
+    const porAnio = {};
+    asistencias.forEach((a) => {
+      const anio = String(a.fecha).slice(0, 4);
+      if (!porAnio[anio]) porAnio[anio] = { presentes: 0, ausentes: 0, tardanzas: 0 };
+      if (a.estado === "PRESENTE")  porAnio[anio].presentes++;
+      else if (a.estado === "AUSENTE")  porAnio[anio].ausentes++;
+      else if (a.estado === "TARDANZA") porAnio[anio].tardanzas++;
+    });
+
+    const ciclos = Object.keys(porAnio)
+      .sort((a, b) => b - a) // más reciente primero
+      .map((anio) => {
+        const { presentes, ausentes, tardanzas } = porAnio[anio];
+        const total = presentes + ausentes + tardanzas;
+        const porcentaje_asistencia = total > 0
+          ? Math.round(((presentes + tardanzas) / total) * 100)
+          : 0;
+        return { ciclo_lectivo: Number(anio), presentes, ausentes, tardanzas, total, porcentaje_asistencia };
+      });
+
+    return { ciclos };
   },
 
   async asistencias({ fecha, turno }) {
@@ -187,17 +245,37 @@ function setApiStatus(online) {
 // =====================================================================
 async function cargarKpis() {
   try {
-    const data = await api.estadisticas();
+    const verHistorico = dom.kpiToggleHistorico.checked;
+
+    const data = verHistorico
+      ? await api.estadisticas() // sin filtros: total de todos los ciclos
+      : await api.estadisticas({
+          fecha: state.filtro.fecha,
+          turno: state.filtro.turno,
+          idCurso: state.filtro.idCurso,
+        });
+
     dom.kpiPresentes.textContent = data.asistencias_presentes ?? "—";
     dom.kpiAusentes.textContent = data.asistencias_ausentes ?? "—";
     dom.kpiTardanzas.textContent = data.asistencias_tardanzas ?? "—";
     dom.kpiTotal.textContent = data.total_asistencias ?? "—";
+
+    dom.kpiScopeLabel.textContent = verHistorico
+      ? "Mostrando: total histórico"
+      : `Mostrando: ${formatFechaLarga(state.filtro.fecha)} · turno ${state.filtro.turno === "MAÑANA" ? "mañana" : "tarde"}`;
+
     setApiStatus(true);
   } catch (err) {
     console.error("Error al cargar estadísticas:", err);
     showToast("No se pudieron cargar las estadísticas", "error");
     setApiStatus(false);
   }
+}
+
+function formatFechaLarga(fechaISO) {
+  if (!fechaISO) return "";
+  const [anio, mes, dia] = fechaISO.split("-");
+  return `${dia}/${mes}/${anio}`;
 }
 
 // =====================================================================
@@ -244,9 +322,17 @@ async function cargarTabla() {
 
     // Filtramos alumnos por curso (client-side: GET /alumnos no soporta este filtro hoy)
     const idCurso = state.filtro.idCurso;
-    const alumnosFiltrados = idCurso
+    let alumnosFiltrados = idCurso
       ? alumnos.filter((a) => String(a.curso_actual) === String(idCurso))
       : alumnos;
+
+    // Búsqueda por DNI o legajo (coincidencia parcial, igual que el buscador de Alumnos)
+    const busqueda = state.filtro.busqueda.trim();
+    if (busqueda) {
+      alumnosFiltrados = alumnosFiltrados.filter(
+        (a) => String(a.dni).includes(busqueda) || String(a.nro_legajo).includes(busqueda)
+      );
+    }
 
     // Combinamos cada alumno con su fichada del día/turno, si existe
     const filas = alumnosFiltrados.map((alumno) => {
@@ -508,18 +594,22 @@ async function fetchAsistenciaManual(payload) {
 }
 
 // =====================================================================
-// MODAL: CERRAR TURNO
+// MODAL: CERRAR TURNO (un botón por turno: Mañana / Tarde)
 // =====================================================================
-dom.btnCerrarTurno.addEventListener("click", () => {
-  const turno = state.filtro.turno;
-  dom.cerrarTurnoNombre.textContent = turno === "MAÑANA" ? "Mañana" : "Tarde";
-  toggleModal(dom.modalCerrarTurno, true);
+dom.btnsCerrarTurno.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const turno = btn.dataset.turno; // "MAÑANA" o "TARDE", fijo en el HTML
+    state.turnoACerrar = turno;
+    dom.cerrarTurnoNombre.textContent = turno === "MAÑANA" ? "Mañana" : "Tarde";
+    toggleModal(dom.modalCerrarTurno, true);
+  });
 });
 
 dom.btnCerrarTurnoCancelar.addEventListener("click", () => toggleModal(dom.modalCerrarTurno, false));
 
 dom.btnCerrarTurnoConfirmar.addEventListener("click", async () => {
-  const turno = state.filtro.turno;
+  const turno = state.turnoACerrar;
+  if (!turno) return;
 
   setButtonLoading(dom.btnCerrarTurnoConfirmar, dom.btnCerrarTurnoConfirmar, true, "Cerrando turno…");
 
@@ -567,21 +657,41 @@ document.addEventListener("keydown", (e) => {
 });
 
 // =====================================================================
-// FILTROS
+// FILTROS (Dashboard)
 // =====================================================================
-dom.btnAplicarFiltros.addEventListener("click", () => {
+function aplicarFiltrosDashboard() {
   state.filtro.fecha = dom.filtroFecha.value || todayISO();
   state.filtro.turno = dom.filtroTurno.value;
   state.filtro.idCurso = dom.filtroCurso.value || null;
+  state.filtro.busqueda = dom.filtroBusqueda.value;
   cargarTabla();
+  cargarKpis(); // si el toggle está en "no histórico", los KPIs dependen de estos mismos filtros
+}
+
+dom.btnAplicarFiltros.addEventListener("click", aplicarFiltrosDashboard);
+
+// Enter en cualquier campo de filtro dispara la búsqueda, sin tener que
+// mover el mouse hasta el botón "Aplicar filtros".
+[dom.filtroBusqueda, dom.filtroFecha].forEach((input) => {
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      aplicarFiltrosDashboard();
+    }
+  });
 });
 
+// El toggle decide si los KPIs muestran el total de todos los ciclos
+// lectivos o se acotan a la fecha/turno/curso filtrados arriba.
+dom.kpiToggleHistorico.addEventListener("change", cargarKpis);
+
 // =====================================================================
-// NAVEGACIÓN ENTRE MÓDULOS (SPA simple por ahora: Dashboard y Alumnos)
+// NAVEGACIÓN ENTRE MÓDULOS (Dashboard, Alumnos, Cursos)
 // =====================================================================
 const vistas = {
   dashboard: document.getElementById("vista-dashboard"),
   alumnos: document.getElementById("vista-alumnos"),
+  cursos: document.getElementById("vista-cursos"),
 };
 
 const topbarConfig = {
@@ -595,6 +705,11 @@ const topbarConfig = {
     titulo: "Gestión de alumnos",
     mostrarCerrarTurno: false,
   },
+  cursos: {
+    eyebrow: "Administración",
+    titulo: "Cursos y horarios",
+    mostrarCerrarTurno: false,
+  },
 };
 
 function cambiarVista(modulo) {
@@ -605,14 +720,17 @@ function cambiarVista(modulo) {
   const cfg = topbarConfig[modulo];
   document.getElementById("topbar-eyebrow").textContent = cfg.eyebrow;
   document.getElementById("topbar-titulo").textContent = cfg.titulo;
-  dom.btnCerrarTurno.classList.toggle("hidden", !cfg.mostrarCerrarTurno);
+  dom.cerrarTurnoGroup.classList.toggle("hidden", !cfg.mostrarCerrarTurno);
 
   document.querySelectorAll("#sidebar-nav a").forEach((l) => l.classList.remove("is-active"));
   document.querySelector(`#sidebar-nav a[data-module="${modulo}"]`).classList.add("is-active");
 
-  // Carga perezosa: traemos el padrón de alumnos solo la primera vez que se abre el módulo
+  // Carga perezosa: traemos los datos solo la primera vez que se abre cada módulo
   if (modulo === "alumnos" && !state.alumnos.cargado) {
     cargarAlumnos();
+  }
+  if (modulo === "cursos" && !state.cursosModulo.cargado) {
+    cargarListadoCursos();
   }
 }
 
@@ -620,7 +738,7 @@ document.querySelectorAll("#sidebar-nav a").forEach((link) => {
   link.addEventListener("click", (e) => {
     e.preventDefault();
     const modulo = link.dataset.module;
-    if (modulo !== "dashboard" && modulo !== "alumnos") {
+    if (!vistas[modulo]) {
       showToast(`El módulo "${link.textContent.trim()}" todavía no está disponible`, "info");
       return;
     }
@@ -643,6 +761,8 @@ Object.assign(state, {
 });
 
 const domAlumnos = {
+  buscarDni: document.getElementById("alumnos-buscar-dni"),
+  buscarLegajo: document.getElementById("alumnos-buscar-legajo"),
   buscarNombre: document.getElementById("alumnos-buscar-nombre"),
   buscarApellido: document.getElementById("alumnos-buscar-apellido"),
   filtroCurso: document.getElementById("alumnos-filtro-curso"),
@@ -672,6 +792,12 @@ const domAlumnos = {
   borrarNombre: document.getElementById("alumno-borrar-nombre"),
   btnBorrarCancelar: document.getElementById("btn-alumno-borrar-cancelar"),
   btnBorrarConfirmar: document.getElementById("btn-alumno-borrar-confirmar"),
+
+  modalPromedio: document.getElementById("modal-promedio"),
+  promedioNombre: document.getElementById("promedio-nombre"),
+  promedioDni: document.getElementById("promedio-dni"),
+  promedioCiclosBody: document.getElementById("promedio-ciclos-body"),
+  btnPromedioCerrar: document.getElementById("btn-promedio-cerrar"),
 };
 
 api.crearAlumno = async function (payload) {
@@ -700,10 +826,12 @@ api.eliminarAlumno = async function (dni) {
   return res.json();
 };
 
-api.buscarAlumnos = async function ({ nombre, apellido }) {
+api.buscarAlumnos = async function ({ nombre, apellido, dni, nroLegajo }) {
   const params = new URLSearchParams();
   if (nombre) params.set("nombre", nombre);
   if (apellido) params.set("apellido", apellido);
+  if (dni) params.set("dni", dni);
+  if (nroLegajo) params.set("nro_legajo", nroLegajo);
   const res = await fetch(`${API_BASE}/alumnos?${params.toString()}`);
   if (!res.ok) throw new Error(await extractError(res));
   return res.json();
@@ -715,7 +843,9 @@ async function cargarAlumnos() {
   try {
     const nombre = domAlumnos.buscarNombre.value.trim();
     const apellido = domAlumnos.buscarApellido.value.trim();
-    const alumnos = await api.buscarAlumnos({ nombre, apellido });
+    const dni = domAlumnos.buscarDni.value.trim();
+    const nroLegajo = domAlumnos.buscarLegajo.value.trim();
+    const alumnos = await api.buscarAlumnos({ nombre, apellido, dni, nroLegajo });
 
     state.alumnos.lista = alumnos;
     state.alumnos.cargado = true;
@@ -778,6 +908,9 @@ function renderTablaAlumnos(alumnos) {
             <span class="inline-flex items-center font-mono text-[0.7rem] font-medium px-2.5 py-1 rounded-full ${estadoClasses}">${a.estado}</span>
           </td>
           <td class="px-5 py-3 text-right space-x-2">
+            <button class="btn-alumno-promedio font-mono text-xs font-medium px-3 py-1.5 rounded-md border border-panel-edge text-stamp-amber hover:text-stamp-amber/80 transition-colors" data-dni="${a.dni}" data-nombre="${escapeHtml(a.apellido)}, ${escapeHtml(a.nombre)}">
+              Promedio
+            </button>
             <button class="btn-alumno-editar font-mono text-xs font-medium px-3 py-1.5 rounded-md border border-panel-edge text-ink-500 hover:text-ink-300 transition-colors" data-dni="${a.dni}">
               Editar
             </button>
@@ -790,6 +923,9 @@ function renderTablaAlumnos(alumnos) {
     })
     .join("");
 
+  domAlumnos.tablaBody.querySelectorAll(".btn-alumno-promedio").forEach((btn) => {
+    btn.addEventListener("click", () => abrirModalPromedio(Number(btn.dataset.dni), btn.dataset.nombre));
+  });
   domAlumnos.tablaBody.querySelectorAll(".btn-alumno-editar").forEach((btn) => {
     btn.addEventListener("click", () => abrirModalAlumno(Number(btn.dataset.dni)));
   });
@@ -797,6 +933,62 @@ function renderTablaAlumnos(alumnos) {
     btn.addEventListener("click", () => abrirModalBorrarAlumno(Number(btn.dataset.dni), btn.dataset.nombre));
   });
 }
+
+// =====================================================================
+// MODAL: PROMEDIO DE ASISTENCIA (por ciclo lectivo)
+// =====================================================================
+async function abrirModalPromedio(dni, nombre) {
+  domAlumnos.promedioNombre.textContent = nombre;
+  domAlumnos.promedioDni.textContent = `DNI ${formatDni(dni)}`;
+  domAlumnos.promedioCiclosBody.innerHTML = `<p class="font-mono text-sm text-paper-dim text-center py-6">Cargando…</p>`;
+  toggleModal(domAlumnos.modalPromedio, true);
+
+  try {
+    const data = await api.promedioAlumno(dni);
+    renderPromedioCiclos(data.ciclos);
+  } catch (err) {
+    console.error("Error al cargar promedio:", err);
+    domAlumnos.promedioCiclosBody.innerHTML = `<p class="font-mono text-sm text-stamp-red text-center py-6">No se pudo cargar el promedio</p>`;
+    showToast(err.message || "No se pudo cargar el promedio de asistencia", "error");
+  }
+}
+
+function renderPromedioCiclos(ciclos) {
+  if (!ciclos || ciclos.length === 0) {
+    domAlumnos.promedioCiclosBody.innerHTML = `<p class="font-mono text-sm text-paper-dim text-center py-6">Sin fichadas registradas</p>`;
+    return;
+  }
+
+  domAlumnos.promedioCiclosBody.innerHTML = ciclos
+    .map((c) => {
+      const color = c.porcentaje_asistencia >= 80
+        ? "text-stamp-green"
+        : c.porcentaje_asistencia >= 60
+          ? "text-stamp-amber"
+          : "text-stamp-red";
+
+      return `
+        <div class="bg-panel-1 border border-panel-edge rounded-lg px-4 py-3">
+          <div class="flex items-center justify-between mb-2">
+            <p class="font-display font-semibold text-paper">Ciclo ${c.ciclo_lectivo}</p>
+            <p class="font-display font-bold text-xl ${color}">${c.porcentaje_asistencia}%</p>
+          </div>
+          <div class="flex gap-4 font-mono text-xs text-paper-dim">
+            <span class="text-stamp-green">${c.presentes} presentes</span>
+            <span class="text-stamp-amber">${c.tardanzas} tardanzas</span>
+            <span class="text-stamp-red">${c.ausentes} ausentes</span>
+            <span class="ml-auto">${c.total} total</span>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+domAlumnos.btnPromedioCerrar.addEventListener("click", () => toggleModal(domAlumnos.modalPromedio, false));
+domAlumnos.modalPromedio.addEventListener("click", (e) => {
+  if (e.target === domAlumnos.modalPromedio) toggleModal(domAlumnos.modalPromedio, false);
+});
 
 // --- Ordenamiento por columna (click en encabezado) ---
 document.querySelectorAll('#vista-alumnos th[data-sort]').forEach((th) => {
@@ -812,6 +1004,16 @@ document.querySelectorAll('#vista-alumnos th[data-sort]').forEach((th) => {
 });
 
 domAlumnos.btnBuscar.addEventListener("click", cargarAlumnos);
+
+// Enter en cualquier campo de búsqueda dispara la búsqueda directamente.
+[domAlumnos.buscarDni, domAlumnos.buscarLegajo, domAlumnos.buscarNombre, domAlumnos.buscarApellido].forEach((input) => {
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      cargarAlumnos();
+    }
+  });
+});
 domAlumnos.filtroCurso.addEventListener("change", aplicarFiltrosAlumnos);
 domAlumnos.filtroEstado.addEventListener("change", aplicarFiltrosAlumnos);
 
@@ -963,6 +1165,211 @@ document.addEventListener("keydown", (e) => {
     [domAlumnos.modal, domAlumnos.modalBorrar].forEach((modal) => toggleModal(modal, false));
   }
 });
+
+// =====================================================================
+// MÓDULO: CURSOS (listado + detalle con horarios y alumnos)
+// =====================================================================
+const DIAS_SEMANA_LABEL = [
+  { key: "lunes", label: "Lunes" },
+  { key: "martes", label: "Martes" },
+  { key: "miercoles", label: "Miércoles" },
+  { key: "jueves", label: "Jueves" },
+  { key: "viernes", label: "Viernes" },
+];
+
+Object.assign(state, {
+  cursosModulo: {
+    cargado: false,
+    lista: [], // [{curso, totalAlumnos}]
+  },
+});
+
+const domCursos = {
+  listadoWrap: document.getElementById("cursos-listado-wrap"),
+  tablaBody: document.getElementById("cursos-tabla-body"),
+  resumen: document.getElementById("cursos-resumen"),
+
+  detalleWrap: document.getElementById("curso-detalle-wrap"),
+  detalleTitulo: document.getElementById("curso-detalle-titulo"),
+  horariosBody: document.getElementById("curso-horarios-body"),
+  alumnosResumen: document.getElementById("curso-alumnos-resumen"),
+  alumnosBody: document.getElementById("curso-alumnos-body"),
+  btnVolver: document.getElementById("btn-curso-volver"),
+};
+
+async function cargarListadoCursos() {
+  domCursos.tablaBody.innerHTML = `<tr><td colspan="3" class="px-5 py-10 text-center text-paper-dim font-mono text-sm">Cargando cursos…</td></tr>`;
+
+  try {
+    // Si el cache global de cursos ya está poblado (cargarCursos del Dashboard
+    // ya corrió en init()), lo reusamos en vez de pedirlo de nuevo.
+    const cursos = state.cursos.length > 0 ? state.cursos : await api.cursos();
+    state.cursos = cursos;
+
+    // Para el conteo de alumnos por curso, pedimos el padrón completo una vez
+    // (mismo patrón que usa el Dashboard) y contamos client-side.
+    const alumnos = await api.alumnos();
+    const conteoPorCurso = {};
+    alumnos.forEach((a) => {
+      conteoPorCurso[a.curso_actual] = (conteoPorCurso[a.curso_actual] || 0) + 1;
+    });
+
+    state.cursosModulo.lista = cursos.map((c) => ({
+      curso: c,
+      totalAlumnos: conteoPorCurso[c.id_curso] || 0,
+    }));
+    state.cursosModulo.cargado = true;
+
+    renderListadoCursos(state.cursosModulo.lista);
+    setApiStatus(true);
+  } catch (err) {
+    console.error("Error al cargar cursos:", err);
+    domCursos.tablaBody.innerHTML = `<tr><td colspan="3" class="px-5 py-10 text-center text-stamp-red font-mono text-sm">No se pudieron cargar los cursos</td></tr>`;
+    showToast("No se pudieron cargar los cursos", "error");
+    setApiStatus(false);
+  }
+}
+
+function renderListadoCursos(items) {
+  if (items.length === 0) {
+    domCursos.tablaBody.innerHTML = `<tr><td colspan="3" class="px-5 py-10 text-center text-paper-dim font-mono text-sm">No hay cursos cargados</td></tr>`;
+    domCursos.resumen.textContent = "0 cursos";
+    return;
+  }
+
+  domCursos.resumen.textContent = `${items.length} curso${items.length === 1 ? "" : "s"}`;
+
+  domCursos.tablaBody.innerHTML = items
+    .map(({ curso, totalAlumnos }) => `
+      <tr class="hover:bg-white/[0.02] transition-colors">
+        <td class="px-5 py-3"><p class="font-medium text-paper">${curso.anio}° "${escapeHtml(curso.division)}"</p></td>
+        <td class="px-5 py-3 font-mono text-paper-dim">${totalAlumnos}</td>
+        <td class="px-5 py-3 text-right">
+          <button class="btn-curso-ver font-mono text-xs font-medium px-3 py-1.5 rounded-md border border-panel-edge text-ink-500 hover:text-ink-300 transition-colors" data-id-curso="${curso.id_curso}">
+            Ver detalle
+          </button>
+        </td>
+      </tr>
+    `)
+    .join("");
+
+  domCursos.tablaBody.querySelectorAll(".btn-curso-ver").forEach((btn) => {
+    btn.addEventListener("click", () => abrirDetalleCurso(Number(btn.dataset.idCurso)));
+  });
+}
+
+async function abrirDetalleCurso(idCurso) {
+  domCursos.listadoWrap.classList.add("hidden");
+  domCursos.detalleWrap.classList.remove("hidden");
+  domCursos.detalleTitulo.textContent = "Cargando…";
+  domCursos.horariosBody.innerHTML = "";
+  domCursos.alumnosBody.innerHTML = "";
+
+  try {
+    const [curso, alumnos] = await Promise.all([
+      api.cursoDetalle(idCurso),
+      api.alumnosDeCurso(idCurso),
+    ]);
+
+    domCursos.detalleTitulo.textContent = `${curso.anio}° "${curso.division}"`;
+    renderHorariosCurso(curso);
+    renderAlumnosCurso(alumnos);
+    setApiStatus(true);
+  } catch (err) {
+    console.error("Error al cargar detalle de curso:", err);
+    domCursos.detalleTitulo.textContent = "Error al cargar el curso";
+    showToast(err.message || "No se pudo cargar el detalle del curso", "error");
+    setApiStatus(false);
+  }
+}
+
+function renderHorariosCurso(curso) {
+  domCursos.horariosBody.innerHTML = DIAS_SEMANA_LABEL
+    .map(({ key, label }) => {
+      const entradaM = curso[`hora_entrada_maniana_${key}`];
+      const salidaM = curso[`hora_salida_maniana_${key}`];
+      const entradaT = curso[`hora_entrada_tarde_${key}`];
+      const salidaT = curso[`hora_salida_tarde_${key}`];
+
+      return `
+        <tr>
+          <td class="px-3 py-2 text-paper font-medium">${label}</td>
+          <td class="px-3 py-2">${entradaM ? entradaM.slice(0, 5) : "—"}</td>
+          <td class="px-3 py-2">${salidaM ? salidaM.slice(0, 5) : "—"}</td>
+          <td class="px-3 py-2">${entradaT ? entradaT.slice(0, 5) : "—"}</td>
+          <td class="px-3 py-2">${salidaT ? salidaT.slice(0, 5) : "—"}</td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+function renderAlumnosCurso(alumnos) {
+  domCursos.alumnosResumen.textContent = `${alumnos.length} alumno${alumnos.length === 1 ? "" : "s"}`;
+
+  if (alumnos.length === 0) {
+    domCursos.alumnosBody.innerHTML = `<tr><td colspan="4" class="px-5 py-10 text-center text-paper-dim font-mono text-sm">Sin alumnos inscriptos</td></tr>`;
+    return;
+  }
+
+  domCursos.alumnosBody.innerHTML = alumnos
+    .map((a) => {
+      const estadoClasses = a.estado === "ACTIVO"
+        ? "bg-stamp-greenbg text-stamp-green"
+        : "bg-panel-edge text-paper-dim";
+      return `
+        <tr class="hover:bg-white/[0.02] transition-colors">
+          <td class="px-5 py-3 font-mono text-paper-dim">${formatDni(a.dni)}</td>
+          <td class="px-5 py-3"><p class="font-medium text-paper">${escapeHtml(a.apellido)}, ${escapeHtml(a.nombre)}</p></td>
+          <td class="px-5 py-3 font-mono text-paper-dim">${a.nro_legajo}</td>
+          <td class="px-5 py-3">
+            <span class="inline-flex items-center font-mono text-[0.7rem] font-medium px-2.5 py-1 rounded-full ${estadoClasses}">${a.estado}</span>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+domCursos.btnVolver.addEventListener("click", () => {
+  domCursos.detalleWrap.classList.add("hidden");
+  domCursos.listadoWrap.classList.remove("hidden");
+});
+
+// =====================================================================
+// AUTO-REFRESH (Dashboard)
+// =====================================================================
+// El escáner ficha asistencias en segundo plano sin avisarle al dashboard
+// (no hay WebSockets ni polling del lado del servidor). Para que el
+// preceptor no tenga que recargar la página a mano, refrescamos la tabla
+// y los KPIs automáticamente cada cierto tiempo — pero SOLO si:
+//   1. La vista activa es el Dashboard (si está en Alumnos/Cursos, no
+//      tiene sentido pegarle al backend por algo que no se está viendo).
+//   2. No hay ningún modal abierto (si está justificando, cargando un
+//      alumno nuevo, etc., un refresh de golpe le tira abajo lo que
+//      estaba escribiendo).
+const AUTO_REFRESH_MS = 20000; // cada 20 segundos
+
+function hayModalAbierto() {
+  const modales = [
+    dom.modalJustificar,
+    dom.modalCargaManual,
+    dom.modalCerrarTurno,
+    domAlumnos.modal,
+    domAlumnos.modalBorrar,
+    domAlumnos.modalPromedio,
+  ];
+  return modales.some((modal) => modal && !modal.classList.contains("hidden"));
+}
+
+async function autoRefreshDashboard() {
+  const dashboardEsLaVistaActiva = !vistas.dashboard.classList.contains("hidden");
+  if (!dashboardEsLaVistaActiva || hayModalAbierto()) return;
+
+  await Promise.all([cargarTabla(), cargarKpis()]);
+}
+
+setInterval(autoRefreshDashboard, AUTO_REFRESH_MS);
 
 // =====================================================================
 // INICIO

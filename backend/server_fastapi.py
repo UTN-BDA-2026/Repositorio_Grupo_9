@@ -158,8 +158,73 @@ async def leer_alumno(dni: int) -> dict:
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
+@app.get("/alumnos/{dni}/promedio")
+async def promedio_asistencia_alumno(dni: int) -> dict:
+	# Promedio de asistencia por ciclo lectivo. Asistencias no tiene una
+	# columna ciclo_lectivo propia, pero como la tabla está particionada por
+	# año de "fecha" (Asistencias_2022, _2023, etc.), usamos EXTRACT(YEAR FROM
+	# fecha) como proxy del ciclo lectivo — coincide 1 a 1 con el esquema de
+	# particionado real.
+	# Fórmula: presentes / (presentes + ausentes + tardanzas) * 100.
+	# Una TARDANZA cuenta como asistencia real (el alumno estuvo presente,
+	# llegó tarde) a fines de "presencia", pero la mostramos aparte para que
+	# el preceptor vea el desglose completo, no solo el promedio final.
+	if app.state.pool is None:
+		raise HTTPException(
+			status_code=503,
+			detail="DATABASE_URL no configurada. Completa el archivo .env.",
+		)
+
+	try:
+		async with app.state.pool.acquire() as conn:
+			existe = await conn.fetchval("SELECT 1 FROM Alumnos WHERE dni = $1;", dni)
+			if not existe:
+				raise HTTPException(status_code=404, detail=f"Alumno con DNI {dni} no encontrado.")
+
+			filas = await conn.fetch(
+				"""SELECT
+					EXTRACT(YEAR FROM fecha)::int AS ciclo_lectivo,
+					COUNT(*) FILTER (WHERE estado = 'PRESENTE') AS presentes,
+					COUNT(*) FILTER (WHERE estado = 'AUSENTE') AS ausentes,
+					COUNT(*) FILTER (WHERE estado = 'TARDANZA') AS tardanzas,
+					COUNT(*) AS total
+				FROM Asistencias
+				WHERE dni_alumno = $1
+				GROUP BY EXTRACT(YEAR FROM fecha)
+				ORDER BY ciclo_lectivo;
+				""",
+				dni,
+			)
+
+		ciclos = []
+		for fila in filas:
+			total = fila["total"]
+			presentes = fila["presentes"]
+			tardanzas = fila["tardanzas"]
+			# presentes + tardanzas: el alumno estuvo físicamente, solo cambia la puntualidad
+			porcentaje = round((presentes + tardanzas) / total * 100, 1) if total > 0 else 0.0
+			ciclos.append({
+				"ciclo_lectivo": fila["ciclo_lectivo"],
+				"presentes": presentes,
+				"ausentes": fila["ausentes"],
+				"tardanzas": tardanzas,
+				"total": total,
+				"porcentaje_asistencia": porcentaje,
+			})
+
+		return {"dni": dni, "ciclos": ciclos}
+	except HTTPException:
+		raise
+	except asyncpg.PostgresError as exc:
+		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
+
 @app.get("/alumnos")
-async def buscar_alumnos(nombre: str | None = None, apellido: str | None = None) -> list[dict]:
+async def buscar_alumnos(
+	nombre: str | None = None,
+	apellido: str | None = None,
+	dni: str | None = None,
+	nro_legajo: str | None = None,
+) -> list[dict]:
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -169,13 +234,19 @@ async def buscar_alumnos(nombre: str | None = None, apellido: str | None = None)
 	try:
 		async with app.state.pool.acquire() as conn:
 			alumnos = await conn.fetch(
-				# FIX: agregamos ::text para que Postgres pueda inferir el tipo cuando $1/$2 llegan como NULL (sin filtros).
+				# FIX: agregamos ::text para que Postgres pueda inferir el tipo cuando $1/$2/etc llegan como NULL (sin filtros).
+				# dni y nro_legajo se reciben como texto y se comparan vía CAST a texto,
+				# para permitir búsqueda parcial (ej: "451" encuentra "45142092") igual que nombre/apellido.
 				"""SELECT * FROM Alumnos
 				WHERE ($1::text IS NULL OR nombre ILIKE '%' || $1 || '%')
-				AND ($2::text IS NULL OR apellido ILIKE '%' || $2 || '%');
+				AND ($2::text IS NULL OR apellido ILIKE '%' || $2 || '%')
+				AND ($3::text IS NULL OR dni::text ILIKE '%' || $3 || '%')
+				AND ($4::text IS NULL OR nro_legajo::text ILIKE '%' || $4 || '%');
 				""",
 				nombre,
-				apellido
+				apellido,
+				dni,
+				nro_legajo,
 			)
 		return [dict(alumno) for alumno in alumnos]
 	except asyncpg.PostgresError as exc:
@@ -334,6 +405,33 @@ async def leer_curso(id_curso: int) -> dict:
 		if curso is None:
 			raise HTTPException(status_code=404, detail=f"Curso con ID {id_curso} no encontrado.")
 		return dict(curso)
+	except asyncpg.PostgresError as exc:
+		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
+
+@app.get("/cursos/{id_curso}/alumnos")
+async def alumnos_de_curso(id_curso: int) -> list[dict]:
+	# Lista de alumnos inscriptos actualmente en este curso (curso_actual).
+	# Usado por la vista de detalle del módulo Cursos en el frontend.
+	if app.state.pool is None:
+		raise HTTPException(
+			status_code=503,
+			detail="DATABASE_URL no configurada. Completa el archivo .env.",
+		)
+
+	try:
+		async with app.state.pool.acquire() as conn:
+			curso_existe = await conn.fetchval("SELECT 1 FROM Cursos WHERE id_curso = $1;", id_curso)
+			if not curso_existe:
+				raise HTTPException(status_code=404, detail=f"Curso con ID {id_curso} no encontrado.")
+
+			alumnos = await conn.fetch(
+				"""SELECT * FROM Alumnos WHERE curso_actual = $1 ORDER BY apellido, nombre;
+				""",
+				id_curso,
+			)
+		return [dict(a) for a in alumnos]
+	except HTTPException:
+		raise
 	except asyncpg.PostgresError as exc:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
@@ -737,10 +835,15 @@ async def listar_inscripciones() -> list[dict]:
 		raise HTTPException(status_code=500, detail=f"Error de base de datos: {exc}") from exc
 
 @app.get("/estadisticas/asistencias")
-async def estadisticas_asistencias() -> dict[str, int]:
-	# compatible con tests antiguos (si venían con querystring)
-	# se ignoran parámetros no declarados
-	
+async def estadisticas_asistencias(
+	fecha: date | None = None,
+	turno: str | None = None,
+	id_curso: int | None = None,
+) -> dict[str, int]:
+	# Sin filtros: comportamiento histórico de siempre (cuenta TODA la tabla,
+	# útil para reportes de ciclo completo). Con filtros: las mismas 4
+	# métricas pero acotadas a la fecha/turno/curso pedidos, para que el
+	# dashboard pueda mostrar "lo de hoy" en vez de todo el historial.
 	if app.state.pool is None:
 		raise HTTPException(
 			status_code=503,
@@ -748,10 +851,47 @@ async def estadisticas_asistencias() -> dict[str, int]:
 		)
 	try:
 		async with app.state.pool.acquire() as conn:
-			total_asistencias = await conn.fetchval("SELECT COUNT(*) FROM Asistencias;")
-			asistencias_presentes = await conn.fetchval("SELECT COUNT(*) FROM Asistencias WHERE estado = 'PRESENTE';")
-			asistencias_ausentes = await conn.fetchval("SELECT COUNT(*) FROM Asistencias WHERE estado = 'AUSENTE';")
-			asistencias_tardanzas = await conn.fetchval("SELECT COUNT(*) FROM Asistencias WHERE estado = 'TARDANZA';")
+			# El filtro por curso necesita cruzar con Alumnos, porque
+			# Asistencias solo guarda dni_alumno (no id_curso directamente).
+			total_asistencias = await conn.fetchval(
+				"""SELECT COUNT(*) FROM Asistencias a
+				JOIN Alumnos al ON al.dni = a.dni_alumno
+				WHERE ($1::date IS NULL OR a.fecha = $1)
+				AND ($2::text IS NULL OR a.turno = $2)
+				AND ($3::int IS NULL OR al.curso_actual = $3);
+				""",
+				fecha, turno, id_curso,
+			)
+			asistencias_presentes = await conn.fetchval(
+				"""SELECT COUNT(*) FROM Asistencias a
+				JOIN Alumnos al ON al.dni = a.dni_alumno
+				WHERE a.estado = 'PRESENTE'
+				AND ($1::date IS NULL OR a.fecha = $1)
+				AND ($2::text IS NULL OR a.turno = $2)
+				AND ($3::int IS NULL OR al.curso_actual = $3);
+				""",
+				fecha, turno, id_curso,
+			)
+			asistencias_ausentes = await conn.fetchval(
+				"""SELECT COUNT(*) FROM Asistencias a
+				JOIN Alumnos al ON al.dni = a.dni_alumno
+				WHERE a.estado = 'AUSENTE'
+				AND ($1::date IS NULL OR a.fecha = $1)
+				AND ($2::text IS NULL OR a.turno = $2)
+				AND ($3::int IS NULL OR al.curso_actual = $3);
+				""",
+				fecha, turno, id_curso,
+			)
+			asistencias_tardanzas = await conn.fetchval(
+				"""SELECT COUNT(*) FROM Asistencias a
+				JOIN Alumnos al ON al.dni = a.dni_alumno
+				WHERE a.estado = 'TARDANZA'
+				AND ($1::date IS NULL OR a.fecha = $1)
+				AND ($2::text IS NULL OR a.turno = $2)
+				AND ($3::int IS NULL OR al.curso_actual = $3);
+				""",
+				fecha, turno, id_curso,
+			)
 
 		return {
 			"total_asistencias": total_asistencias,

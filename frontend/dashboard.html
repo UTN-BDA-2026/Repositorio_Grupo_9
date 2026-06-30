@@ -65,12 +65,6 @@
       <a href="#" data-module="cursos" class="sidebar-link flex items-center gap-3 px-6 py-2.5 border-l-2 border-transparent text-sm font-medium text-paper-dim hover:text-paper hover:bg-white/[0.03] transition-colors">
         <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19.5V6a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v13" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 19.5h12" stroke-linecap="round"/><path d="M4 19.5A2 2 0 0 1 6 17.5" stroke-linecap="round"/></svg>
         Cursos
-        <span class="ml-auto text-[0.6rem] font-mono px-1.5 py-0.5 rounded bg-panel-edge text-paper-dim">pronto</span>
-      </a>
-      <a href="#" data-module="calendario" class="sidebar-link flex items-center gap-3 px-6 py-2.5 border-l-2 border-transparent text-sm font-medium text-paper-dim hover:text-paper hover:bg-white/[0.03] transition-colors">
-        <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4.5" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2.5" x2="8" y2="6.5" stroke-linecap="round"/><line x1="16" y1="2.5" x2="16" y2="6.5" stroke-linecap="round"/></svg>
-        Calendario
-        <span class="ml-auto text-[0.6rem] font-mono px-1.5 py-0.5 rounded bg-panel-edge text-paper-dim">pronto</span>
       </a>
     </nav>
 
@@ -91,11 +85,18 @@
         <p class="font-mono text-[0.7rem] tracking-widest text-ink-500 uppercase" id="topbar-eyebrow">Dashboard</p>
         <h1 class="font-display font-bold text-xl text-paper" id="topbar-titulo">Tablero de estadísticas y carga diaria</h1>
       </div>
-      <button id="btn-cerrar-turno"
-        class="font-display font-semibold text-sm bg-stamp-red/90 hover:bg-stamp-red text-paper px-5 py-2.5 rounded-lg shadow-lg shadow-stamp-red/10 flex items-center gap-2 transition-colors">
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10" stroke-linecap="round"/><path d="M18.36 6.64a9 9 0 1 1-12.73 0" stroke-linecap="round"/></svg>
-        Cerrar turno
-      </button>
+      <div id="cerrar-turno-group" class="flex items-center gap-2.5">
+        <button id="btn-cerrar-turno-maniana" data-turno="MAÑANA"
+          class="btn-cerrar-turno font-display font-semibold text-sm bg-stamp-red/90 hover:bg-stamp-red text-paper px-4 py-2.5 rounded-lg shadow-lg shadow-stamp-red/10 flex items-center gap-2 transition-colors">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10" stroke-linecap="round"/><path d="M18.36 6.64a9 9 0 1 1-12.73 0" stroke-linecap="round"/></svg>
+          Cerrar turno mañana
+        </button>
+        <button id="btn-cerrar-turno-tarde" data-turno="TARDE"
+          class="btn-cerrar-turno font-display font-semibold text-sm bg-stamp-red/90 hover:bg-stamp-red text-paper px-4 py-2.5 rounded-lg shadow-lg shadow-stamp-red/10 flex items-center gap-2 transition-colors">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10" stroke-linecap="round"/><path d="M18.36 6.64a9 9 0 1 1-12.73 0" stroke-linecap="round"/></svg>
+          Cerrar turno tarde
+        </button>
+      </div>
     </header>
 
     <div class="flex-1 overflow-y-auto px-8 py-6 space-y-6">
@@ -104,6 +105,19 @@
       <div id="vista-dashboard">
 
       <!-- KPI Cards -->
+      <div class="flex items-center justify-between mb-1">
+        <p class="font-mono text-[0.68rem] tracking-widest text-paper-dim uppercase" id="kpi-scope-label">
+          Mostrando: total histórico
+        </p>
+        <label class="flex items-center gap-2.5 cursor-pointer select-none">
+          <span class="font-mono text-[0.68rem] tracking-widest text-paper-dim uppercase">Ver total histórico</span>
+          <span class="relative inline-block w-9 h-5">
+            <input type="checkbox" id="kpi-toggle-historico" checked class="peer sr-only" />
+            <span class="absolute inset-0 rounded-full bg-panel-edge peer-checked:bg-ink-500 transition-colors"></span>
+            <span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-paper transition-transform peer-checked:translate-x-4"></span>
+          </span>
+        </label>
+      </div>
       <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-panel-2 border border-panel-edge border-l-[3px] border-l-stamp-green rounded-xl px-5 py-4">
           <p class="font-mono text-[0.68rem] tracking-widest text-paper-dim uppercase mb-1">Presentes</p>
@@ -126,6 +140,11 @@
       <!-- Filtros -->
       <section class="bg-panel-2 border border-panel-edge rounded-xl px-5 py-4">
         <div class="flex flex-wrap items-end gap-4">
+          <div class="min-w-[160px]">
+            <label for="filtro-busqueda" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">DNI o legajo</label>
+            <input type="text" id="filtro-busqueda" placeholder="Buscar DNI o legajo…"
+              class="bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper font-mono placeholder:text-paper-dim/60 focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500 w-full" />
+          </div>
           <div>
             <label for="filtro-fecha" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">Fecha</label>
             <input type="date" id="filtro-fecha"
@@ -193,12 +212,22 @@
         <!-- Buscador + acción nueva -->
         <section class="bg-panel-2 border border-panel-edge rounded-xl px-5 py-4 mb-6">
           <div class="flex flex-wrap items-end gap-4">
-            <div class="flex-1 min-w-[180px]">
+            <div class="flex-1 min-w-[140px]">
+              <label for="alumnos-buscar-dni" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">DNI</label>
+              <input type="text" id="alumnos-buscar-dni" placeholder="Buscar por DNI…"
+                class="w-full bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper font-mono placeholder:text-paper-dim/60 focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500" />
+            </div>
+            <div class="flex-1 min-w-[140px]">
+              <label for="alumnos-buscar-legajo" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">Legajo</label>
+              <input type="text" id="alumnos-buscar-legajo" placeholder="Buscar por legajo…"
+                class="w-full bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper font-mono placeholder:text-paper-dim/60 focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500" />
+            </div>
+            <div class="flex-1 min-w-[160px]">
               <label for="alumnos-buscar-nombre" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">Nombre</label>
               <input type="text" id="alumnos-buscar-nombre" placeholder="Buscar por nombre…"
                 class="w-full bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper placeholder:text-paper-dim/60 focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500" />
             </div>
-            <div class="flex-1 min-w-[180px]">
+            <div class="flex-1 min-w-[160px]">
               <label for="alumnos-buscar-apellido" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">Apellido</label>
               <input type="text" id="alumnos-buscar-apellido" placeholder="Buscar por apellido…"
                 class="w-full bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper placeholder:text-paper-dim/60 focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500" />
@@ -260,12 +289,91 @@
       </div>
       <!-- ============ /VISTA: ALUMNOS ============ -->
 
+      <!-- ============ VISTA: CURSOS ============ -->
+      <div id="vista-cursos" class="hidden">
+
+        <!-- Listado de cursos -->
+        <section id="cursos-listado-wrap" class="bg-panel-2 border border-panel-edge rounded-xl overflow-hidden">
+          <div class="px-5 py-4 border-b border-panel-edge flex items-center justify-between">
+            <h2 class="font-display font-semibold text-paper">Cursos</h2>
+            <p class="font-mono text-xs text-paper-dim" id="cursos-resumen">—</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left font-mono text-[0.68rem] tracking-widest text-paper-dim uppercase border-b border-panel-edge">
+                  <th class="px-5 py-3">Curso</th>
+                  <th class="px-5 py-3">Alumnos inscriptos</th>
+                  <th class="px-5 py-3 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="cursos-tabla-body" class="divide-y divide-panel-edge/60">
+                <tr><td colspan="3" class="px-5 py-10 text-center text-paper-dim font-mono text-sm">Cargando cursos…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Detalle de un curso (alumnos + horarios) -->
+        <section id="curso-detalle-wrap" class="hidden bg-panel-2 border border-panel-edge rounded-xl overflow-hidden">
+          <div class="px-5 py-4 border-b border-panel-edge flex items-center justify-between">
+            <div>
+              <button id="btn-curso-volver" class="font-mono text-xs text-ink-500 hover:text-ink-300 mb-1 flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Volver a cursos
+              </button>
+              <h2 class="font-display font-semibold text-paper text-lg" id="curso-detalle-titulo">Curso</h2>
+            </div>
+          </div>
+
+          <!-- Horarios del curso -->
+          <div class="px-5 py-4 border-b border-panel-edge">
+            <p class="font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-3">Horarios semanales</p>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="text-left font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase border-b border-panel-edge">
+                    <th class="px-3 py-2">Día</th>
+                    <th class="px-3 py-2">Entrada mañana</th>
+                    <th class="px-3 py-2">Salida mañana</th>
+                    <th class="px-3 py-2">Entrada tarde</th>
+                    <th class="px-3 py-2">Salida tarde</th>
+                  </tr>
+                </thead>
+                <tbody id="curso-horarios-body" class="divide-y divide-panel-edge/60 font-mono text-paper-dim"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Alumnos del curso -->
+          <div class="px-5 py-4 border-b border-panel-edge flex items-center justify-between">
+            <p class="font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase">Alumnos inscriptos</p>
+            <p class="font-mono text-xs text-paper-dim" id="curso-alumnos-resumen">—</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left font-mono text-[0.68rem] tracking-widest text-paper-dim uppercase border-b border-panel-edge">
+                  <th class="px-5 py-3">DNI</th>
+                  <th class="px-5 py-3">Alumno</th>
+                  <th class="px-5 py-3">Legajo</th>
+                  <th class="px-5 py-3">Estado</th>
+                </tr>
+              </thead>
+              <tbody id="curso-alumnos-body" class="divide-y divide-panel-edge/60"></tbody>
+            </table>
+          </div>
+        </section>
+
+      </div>
+      <!-- ============ /VISTA: CURSOS ============ -->
+
     </div>
   </main>
 </div>
 
 <!-- ============ MODAL: ALUMNO (CREAR / EDITAR) ============ -->
-<div id="modal-alumno" x-cloak class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4 py-8 overflow-y-auto">
+<div id="modal-alumno" class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4 py-8 overflow-y-auto">
   <div class="bg-panel-2 border border-panel-edge rounded-2xl w-full max-w-lg shadow-2xl my-auto">
     <div class="px-6 py-5 border-b border-panel-edge">
       <p class="font-mono text-[0.65rem] tracking-widest text-ink-500 uppercase mb-1" id="modal-alumno-eyebrow">Alta de alumno</p>
@@ -344,8 +452,25 @@
   </div>
 </div>
 
+<!-- ============ MODAL: PROMEDIO DE ASISTENCIA ============ -->
+<div id="modal-promedio" class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
+  <div class="bg-panel-2 border border-panel-edge rounded-2xl w-full max-w-md shadow-2xl">
+    <div class="px-6 py-5 border-b border-panel-edge">
+      <p class="font-mono text-[0.65rem] tracking-widest text-ink-500 uppercase mb-1">Historial de asistencia</p>
+      <h3 class="font-display font-bold text-lg text-paper" id="promedio-nombre">Alumno</h3>
+      <p class="font-mono text-xs text-paper-dim" id="promedio-dni">DNI —</p>
+    </div>
+    <div class="px-6 py-5 space-y-3 max-h-[60vh] overflow-y-auto" id="promedio-ciclos-body">
+      <p class="font-mono text-sm text-paper-dim text-center py-6">Cargando…</p>
+    </div>
+    <div class="px-6 py-4 border-t border-panel-edge flex justify-end">
+      <button id="btn-promedio-cerrar" class="font-display font-medium text-sm text-paper-dim hover:text-paper px-4 py-2 rounded-lg transition-colors">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ MODAL: CONFIRMAR BORRADO DE ALUMNO ============ -->
-<div id="modal-alumno-borrar" x-cloak class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
+<div id="modal-alumno-borrar" class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
   <div class="bg-panel-2 border border-panel-edge rounded-2xl w-full max-w-sm shadow-2xl">
     <div class="px-6 py-5">
       <div class="w-11 h-11 rounded-full bg-stamp-red/10 flex items-center justify-center mb-4">
@@ -366,7 +491,7 @@
 </div>
 
 <!-- ============ MODAL: JUSTIFICAR ============ -->
-<div id="modal-justificar" x-cloak class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
+<div id="modal-justificar" class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
   <div class="bg-panel-2 border border-panel-edge rounded-2xl w-full max-w-md shadow-2xl">
     <div class="px-6 py-5 border-b border-panel-edge">
       <p class="font-mono text-[0.65rem] tracking-widest text-ink-500 uppercase mb-1">Edición de registro</p>
@@ -416,7 +541,7 @@
 </div>
 
 <!-- ============ MODAL: CARGA MANUAL ============ -->
-<div id="modal-carga-manual" x-cloak class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
+<div id="modal-carga-manual" class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
   <div class="bg-panel-2 border border-panel-edge rounded-2xl w-full max-w-md shadow-2xl">
     <div class="px-6 py-5 border-b border-panel-edge">
       <p class="font-mono text-[0.65rem] tracking-widest text-ink-500 uppercase mb-1">Registro individual</p>
@@ -471,7 +596,7 @@
 </div>
 
 <!-- ============ MODAL: CONFIRMAR CIERRE DE TURNO ============ -->
-<div id="modal-cerrar-turno" x-cloak class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
+<div id="modal-cerrar-turno" class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
   <div class="bg-panel-2 border border-panel-edge rounded-2xl w-full max-w-sm shadow-2xl">
     <div class="px-6 py-5">
       <div class="w-11 h-11 rounded-full bg-stamp-red/10 flex items-center justify-center mb-4">

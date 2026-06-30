@@ -117,6 +117,12 @@ RETURNS TABLE (
   estado VARCHAR,
   mensaje VARCHAR
 ) AS $$
+#variable_conflict use_column
+-- FIX: la columna de salida "estado" (definida en RETURNS TABLE) entra al
+-- namespace de variables de la función y choca con Asistencias.estado y
+-- Alumnos.estado dentro de cualquier SQL embebido (ej. el INSERT más abajo).
+-- Esta directiva le dice a PL/pgSQL que, ante esa ambigüedad, priorice
+-- siempre la columna real de la tabla por sobre la variable de salida.
 DECLARE
   -- Variables para datos del alumno
   v_alumno_estado VARCHAR;

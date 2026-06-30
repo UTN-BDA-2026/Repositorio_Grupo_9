@@ -94,15 +94,56 @@ setInterval(updateClock, 15000);
 // =========================================
 // FOCO PERMANENTE EN EL INPUT OCULTO
 // =========================================
-// El "escáner" Scan-it-Office funciona como teclado: necesita que el input
-// tenga foco para poder escribir el DNI ahí. Lo recuperamos agresivamente.
+// El "escáner" Scan-it-Office funciona como teclado: necesita que (a) la
+// ventana del navegador tenga el foco del sistema operativo, y (b) el input
+// oculto tenga el foco del DOM. Si se pierde cualquiera de los dos, las
+// teclas del escaneo van a parar a otro lado y la página nunca se entera —
+// eso NO se puede interceptar desde JS, es una limitación real del
+// "teclado virtual". Lo que sí podemos hacer es:
+//   1. Reintentar agresivamente recuperar el foco del input.
+//   2. Avisar visualmente cuando la ventana no tiene foco, para que quien
+//      esté en portería sepa que tiene que volver a hacer click acá.
+const focusWarningEl = document.getElementById("focus-warning");
+
 function focusInput() {
   scannerInput.value = "";
   scannerInput.focus();
 }
 
-document.addEventListener("click", focusInput);
-window.addEventListener("focus", focusInput);
+function actualizarAvisoFoco() {
+  // document.hasFocus() es false si otra ventana/app tiene el foco del SO.
+  // document.hidden es true si esta pestaña está minimizada o en 2do plano.
+  const sinFoco = !document.hasFocus() || document.hidden;
+  focusWarningEl.classList.toggle("is-visible", sinFoco);
+}
+
+document.addEventListener("click", () => {
+  focusInput();
+  actualizarAvisoFoco();
+});
+window.addEventListener("focus", () => {
+  focusInput();
+  actualizarAvisoFoco();
+});
+window.addEventListener("blur", actualizarAvisoFoco);
+document.addEventListener("visibilitychange", actualizarAvisoFoco);
+focusWarningEl.addEventListener("click", () => {
+  focusInput();
+  actualizarAvisoFoco();
+});
+
+// Reintento periódico: aunque la ventana tenga foco del SO, a veces el
+// input pierde el foco del DOM (ej. el usuario clickeó el body y algún
+// elemento se lo robó). Cada 1s, si la ventana tiene foco pero el input
+// no es el elemento activo, lo recuperamos en silencio.
+setInterval(() => {
+  if (document.hasFocus() && document.activeElement !== scannerInput) {
+    focusInput();
+  }
+  actualizarAvisoFoco();
+}, 1000);
+
+actualizarAvisoFoco();
 
 // =========================================
 // CAPTURA DEL ESCANEO
@@ -141,8 +182,29 @@ async function handleScan(rawValue) {
 }
 
 function parseDni(rawValue) {
-  // Limpia puntos, espacios y cualquier caracter no numérico que pueda
-  // venir del escáner (ej. "30.123.456" -> "30123456")
+  // El lector "Scan-it-to-Office" actúa como teclado y tipea el contenido
+  // completo del código de barras del DNI argentino, con este formato:
+  //
+  //   TRAMITE@APELLIDO@NOMBRE@SEXO@DNI@EJEMPLAR@FECHA_NAC@FECHA_EMISION@...
+  //
+  // Ej: "00616144568@VELAZCO@FRANCO VALENTIN@M@45142092@A@26/09/2003@29/10/2019@206"
+  //
+  // El DNI está en la posición 5 (índice 4). Si limpiáramos todos los
+  // caracteres no numéricos del string completo (como antes), se pegarían
+  // el trámite + el DNI + las fechas en un solo número gigante e inválido.
+  if (rawValue.includes("@")) {
+    const campos = rawValue.split("@");
+    const dniCampo = campos[4];
+    if (dniCampo) {
+      const soloNumeros = dniCampo.replace(/\D/g, "");
+      const dni = parseInt(soloNumeros, 10);
+      if (!Number.isNaN(dni) && dni > 0) return dni;
+    }
+    return null;
+  }
+
+  // Fallback: si no viene con el formato del código de barras (ej. alguien
+  // tipeó el DNI a mano en el input), limpiamos puntos/espacios normalmente.
   const cleaned = rawValue.replace(/\D/g, "");
   if (!cleaned) return null;
 
@@ -199,7 +261,22 @@ function setConnectionStatus(isOnline) {
 async function safeErrorMessage(response) {
   try {
     const data = await response.json();
-    return data?.detail || data?.message || `Error ${response.status}`;
+    const detail = data?.detail;
+
+    // Caso normal: el backend lanzó HTTPException(detail="texto") -> string.
+    if (typeof detail === "string") return detail;
+
+    // Caso 422 de validación de Pydantic: detail es una LISTA de objetos
+    // como [{ type, loc, msg, input }, ...]. Si lo interpolamos tal cual
+    // en el HTML, JS lo convierte a "[object Object]".
+    if (Array.isArray(detail)) {
+      const mensajes = detail
+        .map((err) => err?.msg || JSON.stringify(err))
+        .filter(Boolean);
+      if (mensajes.length) return mensajes.join(" · ");
+    }
+
+    return data?.message || `Error ${response.status}`;
   } catch (_) {
     return `Error ${response.status}`;
   }
