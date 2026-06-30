@@ -14,7 +14,7 @@ Preparaciones del sistema:
 
 4. Instalar las dependencias.
     python -m pip install --upgrade pip
-    python -m pip install -r backend\requirements.txt
+    python -m pip install -r requirements.txt
 
 5. Crear su archivo de configuración de entorno.
     Copy-Item backend\.env.example backend\.env
