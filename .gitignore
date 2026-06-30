@@ -1,5 +1,13 @@
-backend/__pycache__/models.cpython-310.pyc
-backend/__pycache__/server_fastapi.cpython-310.pyc
-backend/test/__pycache__/test_api.cpython-310-pytest-9.1.1.pyc
-backend/.env
-backend/.venv
+# Entornos virtuales (puede estar en la raíz o en cualquier subcarpeta)
+.venv/
+venv/
+
+# Archivos compilados de Python (cualquier nombre, cualquier carpeta)
+__pycache__/
+*.pyc
+
+# Variables de entorno con datos sensibles
+.env
+
+# Cache de pytest
+.pytest_cache/
