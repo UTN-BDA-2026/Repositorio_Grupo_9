@@ -97,3 +97,13 @@ CREATE TABLE IF NOT EXISTS  Asistencias_2026 PARTITION OF Asistencias
 
 -- Partición de respaldo para fechas fuera de los rangos anteriores
 CREATE TABLE IF NOT EXISTS Asistencias_default PARTITION OF Asistencias DEFAULT;
+
+ALTER TABLE Asistencias
+  ALTER COLUMN hora_entrada DROP NOT NULL;
+
+-- También quitamos el DEFAULT CURRENT_TIME: para una fichada real (PRESENTE/
+-- TARDANZA) el backend siempre manda una hora explícita, y para AUSENTE
+-- queremos que quede NULL en vez de "ahora" por accidente si algún INSERT
+-- futuro se olvida de pasar el valor.
+ALTER TABLE Asistencias
+  ALTER COLUMN hora_entrada DROP DEFAULT;
