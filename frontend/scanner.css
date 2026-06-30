@@ -296,6 +296,37 @@ body {
   pointer-events: none;
 }
 
+/* ============ Aviso de foco perdido ============ */
+.focus-warning {
+  display: none; /* JS lo muestra con .is-visible cuando corresponde */
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--stamp-red-bg);
+  border: 1px solid var(--stamp-red);
+  color: var(--paper);
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+  animation: focus-warning-pulse 1.6s ease-in-out infinite;
+}
+
+.focus-warning.is-visible { display: flex; }
+
+.focus-warning__icon {
+  font-size: 1.1rem;
+  color: var(--stamp-red);
+  flex-shrink: 0;
+}
+
+@keyframes focus-warning-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(179, 71, 61, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(179, 71, 61, 0); }
+}
+
 /* ============ Shake en error ============ */
 .terminal.shake { animation: terminal-shake 0.4s ease; }
 

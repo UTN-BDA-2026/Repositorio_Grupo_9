@@ -1337,6 +1337,41 @@ domCursos.btnVolver.addEventListener("click", () => {
 });
 
 // =====================================================================
+// AUTO-REFRESH (Dashboard)
+// =====================================================================
+// El escáner ficha asistencias en segundo plano sin avisarle al dashboard
+// (no hay WebSockets ni polling del lado del servidor). Para que el
+// preceptor no tenga que recargar la página a mano, refrescamos la tabla
+// y los KPIs automáticamente cada cierto tiempo — pero SOLO si:
+//   1. La vista activa es el Dashboard (si está en Alumnos/Cursos, no
+//      tiene sentido pegarle al backend por algo que no se está viendo).
+//   2. No hay ningún modal abierto (si está justificando, cargando un
+//      alumno nuevo, etc., un refresh de golpe le tira abajo lo que
+//      estaba escribiendo).
+const AUTO_REFRESH_MS = 20000; // cada 20 segundos
+
+function hayModalAbierto() {
+  const modales = [
+    dom.modalJustificar,
+    dom.modalCargaManual,
+    dom.modalCerrarTurno,
+    domAlumnos.modal,
+    domAlumnos.modalBorrar,
+    domAlumnos.modalPromedio,
+  ];
+  return modales.some((modal) => modal && !modal.classList.contains("hidden"));
+}
+
+async function autoRefreshDashboard() {
+  const dashboardEsLaVistaActiva = !vistas.dashboard.classList.contains("hidden");
+  if (!dashboardEsLaVistaActiva || hayModalAbierto()) return;
+
+  await Promise.all([cargarTabla(), cargarKpis()]);
+}
+
+setInterval(autoRefreshDashboard, AUTO_REFRESH_MS);
+
+// =====================================================================
 // INICIO
 // =====================================================================
 async function init() {

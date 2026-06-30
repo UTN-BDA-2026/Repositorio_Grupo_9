@@ -13,6 +13,15 @@
 
   <div class="scene">
 
+    <!-- Aviso de foco perdido: se muestra automáticamente cuando la ventana
+         no tiene el foco del sistema operativo. Mientras esté visible, el
+         escaneo NO va a funcionar (Scan-it-Office simula un teclado y el
+         SO le manda las teclas a quien tenga el foco, no a esta página). -->
+    <div class="focus-warning" id="focus-warning">
+      <span class="focus-warning__icon">⚠</span>
+      <span>Esta ventana perdió el foco — el escáner no va a funcionar. Hacé click acá para reactivarlo.</span>
+    </div>
+
     <!-- Cabecera tipo credencial -->
     <header class="masthead">
       <div class="masthead__id">
