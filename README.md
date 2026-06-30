@@ -1,63 +1,120 @@
-<!-- cSpell:disable -->
+# Sistema de Asistencia Escolar — Grupo 9
 
-Preparaciones del sistema:
+Sistema de registro y gestión de asistencias escolares con escaneo de DNI, desarrollado con FastAPI, PostgreSQL y HTML/CSS/JS.
 
-1. En Visual Studio Code, instalar la extensión Live Server de Ritwick Dey y PostgreSQL de Microsoft
-    https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer
-    https://marketplace.visualstudio.com/items?itemName=ms-ossdata.vscode-pgsql
+---
 
-2. Crear un entorno virtual propio.
-    python -m venv .venv
+## Requisitos previos
 
-3. Activar el entorno.
-    .\.venv\Scripts\Activate.ps1
+- [Python 3.10+](https://www.python.org/downloads/)
+- [PostgreSQL](https://www.postgresql.org/download/)
+- [Visual Studio Code](https://code.visualstudio.com/)
+  - Extensión [Live Server](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer) de Ritwick Dey
+  - Extensión [PostgreSQL](https://marketplace.visualstudio.com/items?itemName=ms-ossdata.vscode-pgsql) de Microsoft
 
-4. Instalar las dependencias.
-    python -m pip install --upgrade pip
-    python -m pip install -r requirements.txt
+---
 
-5. Crear su archivo de configuración de entorno.
-    Copy-Item backend\.env.example backend\.env
+## Instalación
 
-6. Modificar la sección "contrasenia" del .env con tu contraseña de PostgreSQL.
+### 1. Crear y activar el entorno virtual
 
-7. Con PostgreSQL, crear una base de datos. Se recomienda 'proyecto_asistencia'.
-    Por ejemplo: 
-    CREATE DATABASE proyecto_asistencia;
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
-8. Vincular la base de datos al proyecto:
-    a. En el panel izquierdo en Visual Studio, hacer click en PostgreSQL -> Add Conection.
-    b. Completar los campos siguientes campos:
-        - Nombre del servidor: 'localhost'
-        - Nombre de usuario: 'postgres'
-        - Contraseña: tu contraseña de PostgreSQL
-        - Nombre de la base de datos: el nombre que le pusiste a la base de datos que creaste en el paso anterior
-        - Nombre de conexión: un nombre para la conexión. Se recomienda 'proyecto_asistencia_connection'.
-    c. Dejar los demás campos como están por defecto y guardar.
+### 2. Instalar las dependencias
 
-9. Conectar proyecto a la base de datos:
-    a. Abrir un archivo cualquiera de la carpeta database.
-    b. En la parte de abajo de la interfaz de Visual Studio, debería haber una sección que dice "PGSQL Disconnected" con un círculo rojo. Hacer click ahí.
-    c. En la ventana que se despliega, seleccionar la conexión creada en el paso anterior.
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
-10. Carga lógica de la base de datos:
-    Para cada archivo dentro de la carpeta database:
-    a. Abir el archivo.
-    b. Hacer click en una línea cualquiera.
-    c. Ejecutar: CTRL + SHIFT + E
-    Nota: existe la posibilidad de que se deba repetir el paso 9 para cada archivo si sigue saliendo "PGSQL Disconnected".
+### 3. Configurar las variables de entorno
 
-11. Insertar datos de prueba:
-    a. Navegar al directorio backend -> scripts
-    b. Para los archivos "seed_asistencias.sql", "seed_db.sql" y "seed_excepciones.sql" realizar el mismo procedimiento del paso 10.
+```powershell
+Copy-Item backend\.env.example backend\.env
+```
 
-Preparaciones para el escaneo de DNI:
-{PLACEHOLDER}
+Abrí el archivo `backend/.env` y reemplazá `contrasenia` con tu contraseña de PostgreSQL.
 
-Inicio del servidor:
-En una terminal, detron del entorno virtual creado en el paso 2, ejecutar 'python -m uvicorn backend.server_fastapi:app --reload'.
+---
 
-    - Para probar el escaneo de un DNI: Dentro de la carpeta frontend, haga click derecho sobre el archivo "scanner.html" y seleccione "Open with Live Server"
-    - Para probar el dashboard (sistema para el preceptor): Dentro de la carpeta frontend, haga click derecho sobre el archivo "dashboard.html" y seleccione "Open with Live Server"
+## Configuración de la base de datos
 
+### 4. Crear la base de datos
 
+Desde el cliente de PostgreSQL que prefieras, ejecutá:
+
+```sql
+CREATE DATABASE proyecto_asistencia;
+```
+
+### 5. Conectar el proyecto a la base de datos en VS Code
+
+1. En el panel izquierdo, hacé click en **PostgreSQL → Add Connection**.
+2. Completá los siguientes campos:
+   | Campo | Valor |
+   |---|---|
+   | Nombre del servidor | `localhost` |
+   | Nombre de usuario | `postgres` |
+   | Contraseña | tu contraseña de PostgreSQL |
+   | Nombre de la base de datos | el nombre elegido en el paso anterior |
+   | Nombre de conexión | `proyecto_asistencia_connection` (recomendado) |
+3. Dejá los demás campos con sus valores por defecto y guardá.
+
+### 6. Cargar el esquema y la lógica
+
+Para cada archivo dentro de la carpeta `database/` (`1_esquema.sql`, `2_indices.sql`, `3_validators.sql`, `4_procedures.sql`):
+
+1. Abrí el archivo en VS Code.
+2. Si en la barra inferior aparece **PGSQL Disconnected** (círculo rojo), hacé click ahí y seleccioná la conexión creada en el paso anterior.
+3. Hacé click en cualquier línea del archivo y ejecutá con **Ctrl + Shift + E**.
+
+> **Nota:** puede ser necesario reconectar (repetir el paso 2) al abrir cada archivo nuevo.
+
+### 7. Insertar datos de prueba
+
+Repetí el mismo procedimiento del paso anterior para los siguientes archivos dentro de `backend/scripts/`:
+
+- `seed_db.sql`
+- `seed_excepciones.sql`
+- `seed_asistencias.sql`
+
+> **Nota:** la carga de datos puede demorar varios minutos.
+
+---
+
+## Inicio del servidor
+
+Desde una terminal con el entorno virtual activado, ejecutá:
+
+```powershell
+python -m uvicorn backend.server_fastapi:app --reload
+```
+
+---
+
+## Uso de la aplicación
+
+Con el servidor corriendo, abrí cualquiera de las siguientes interfaces desde la carpeta `frontend/`:
+
+- **Dashboard (para preceptores):** click derecho sobre `dashboard.html` → *Open with Live Server*
+- **Escáner de DNI:** click derecho sobre `scanner.html` → *Open with Live Server*
+
+---
+
+## Configuración del escaneo de DNI *(opcional)*
+
+Solo necesario si se quiere probar el escaneo físico con el celular.
+
+1. Instalá en un celular Android la app [**Scan-IT to Office**](https://play.google.com/store/apps/details?id=com.tecit.android.bluescanner.office).
+2. Instalá en la computadora el [**Smart Keyboard Wedge**](https://www.tec-it.com/es/download/download-feedback/DownloadRegistration.aspx?param=id%3d208%3bfilename%3dWindows%2fSTO-Tools_SmartKeyboardWedge_2_2_0.exe%3bdownloadLink%3ddownload%2fWindows%2fSTO-Tools_SmartKeyboardWedge_2_2_0.exe).
+3. Abrí ambas aplicaciones.
+4. En la app del celular, tocá el ícono de **Wi-Fi amarillo** en la parte inferior.
+5. Seleccioná **Aplicaciones de escritorio → Escanear Código QR**.
+6. Escaneá el código que muestra la app de escritorio.
+7. En la app de escritorio, ir a **Options → Append key(s) after data → Return / Enter**.
+8. Abrí `scanner.html` con Live Server, mantené la ventana en foco y escaneá un DNI con el celular.
+
+> **Nota:** si el DNI escaneado no está registrado como alumno en el sistema, no será reconocido.
