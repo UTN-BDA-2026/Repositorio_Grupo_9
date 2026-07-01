@@ -19,7 +19,7 @@ Sistema de registro y gestión de asistencias escolares con escaneo de DNI, desa
 ### 1. Crear y activar el entorno virtual
 
 ```powershell
-python -m venv .venv
+py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
