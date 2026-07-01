@@ -6,6 +6,10 @@ const API_BASE = "http://localhost:8000"; // Cambiar si el backend corre en otro
 // =====================================================================
 // ESTADO GLOBAL
 // =====================================================================
+// módulos extra — se rellenan más abajo cuando se inicializa cada sección
+const stateExcepciones = { lista: [], cargado: false, itemABorrar: null };
+const stateCursosModal = { cursoEnEdicion: null, cursoABorrar: null };
+
 const state = {
   cursos: [],          // cache de GET /cursos
   alumnosCurso: [],     // alumnos del curso filtrado (curso_actual === filtro)
@@ -692,6 +696,7 @@ const vistas = {
   dashboard: document.getElementById("vista-dashboard"),
   alumnos: document.getElementById("vista-alumnos"),
   cursos: document.getElementById("vista-cursos"),
+  excepciones: document.getElementById("vista-excepciones"),
 };
 
 const topbarConfig = {
@@ -708,6 +713,11 @@ const topbarConfig = {
   cursos: {
     eyebrow: "Administración",
     titulo: "Cursos y horarios",
+    mostrarCerrarTurno: false,
+  },
+  excepciones: {
+    eyebrow: "Administración",
+    titulo: "Calendario escolar · Excepciones",
     mostrarCerrarTurno: false,
   },
 };
@@ -731,6 +741,9 @@ function cambiarVista(modulo) {
   }
   if (modulo === "cursos" && !state.cursosModulo.cargado) {
     cargarListadoCursos();
+  }
+  if (modulo === "excepciones" && !stateExcepciones.cargado) {
+    cargarExcepciones();
   }
 }
 
@@ -1244,9 +1257,15 @@ function renderListadoCursos(items) {
       <tr class="hover:bg-white/[0.02] transition-colors">
         <td class="px-5 py-3"><p class="font-medium text-paper">${curso.anio}° "${escapeHtml(curso.division)}"</p></td>
         <td class="px-5 py-3 font-mono text-paper-dim">${totalAlumnos}</td>
-        <td class="px-5 py-3 text-right">
+        <td class="px-5 py-3 text-right space-x-2">
           <button class="btn-curso-ver font-mono text-xs font-medium px-3 py-1.5 rounded-md border border-panel-edge text-ink-500 hover:text-ink-300 transition-colors" data-id-curso="${curso.id_curso}">
             Ver detalle
+          </button>
+          <button class="btn-curso-editar font-mono text-xs font-medium px-3 py-1.5 rounded-md border border-panel-edge text-paper-dim hover:text-paper transition-colors" data-id-curso="${curso.id_curso}">
+            Editar
+          </button>
+          <button class="btn-curso-borrar font-mono text-xs font-medium px-3 py-1.5 rounded-md border border-panel-edge text-stamp-red hover:text-stamp-red/80 transition-colors" data-id-curso="${curso.id_curso}" data-nombre="${curso.anio}° &quot;${escapeHtml(curso.division)}&quot;">
+            Eliminar
           </button>
         </td>
       </tr>
@@ -1255,6 +1274,12 @@ function renderListadoCursos(items) {
 
   domCursos.tablaBody.querySelectorAll(".btn-curso-ver").forEach((btn) => {
     btn.addEventListener("click", () => abrirDetalleCurso(Number(btn.dataset.idCurso)));
+  });
+  domCursos.tablaBody.querySelectorAll(".btn-curso-editar").forEach((btn) => {
+    btn.addEventListener("click", () => abrirModalCurso(Number(btn.dataset.idCurso)));
+  });
+  domCursos.tablaBody.querySelectorAll(".btn-curso-borrar").forEach((btn) => {
+    btn.addEventListener("click", () => abrirModalBorrarCurso(Number(btn.dataset.idCurso), btn.dataset.nombre));
   });
 }
 
@@ -1337,6 +1362,400 @@ domCursos.btnVolver.addEventListener("click", () => {
 });
 
 // =====================================================================
+// MÓDULO: CRUD CURSOS
+// =====================================================================
+const DIAS_SEMANA_MODAL = [
+  { key: "lunes",     label: "Lunes" },
+  { key: "martes",    label: "Martes" },
+  { key: "miercoles", label: "Miércoles" },
+  { key: "jueves",    label: "Jueves" },
+  { key: "viernes",   label: "Viernes" },
+];
+
+const domModalCurso = {
+  modal:        document.getElementById("modal-curso"),
+  eyebrow:      document.getElementById("modal-curso-eyebrow"),
+  titulo:       document.getElementById("modal-curso-titulo"),
+  id:           document.getElementById("curso-id"),
+  anio:         document.getElementById("curso-anio"),
+  division:     document.getElementById("curso-division"),
+  horariosBody: document.getElementById("curso-horarios-inputs"),
+  btnCancelar:  document.getElementById("btn-curso-cancelar"),
+  btnGuardar:   document.getElementById("btn-curso-guardar"),
+  btnGuardarText: document.getElementById("btn-curso-guardar-text"),
+  modalBorrar:       document.getElementById("modal-curso-borrar"),
+  borrarNombre:      document.getElementById("curso-borrar-nombre"),
+  btnBorrarCancelar: document.getElementById("btn-curso-borrar-cancelar"),
+  btnBorrarConfirmar: document.getElementById("btn-curso-borrar-confirmar"),
+};
+
+// API methods para cursos CRUD
+api.crearCurso = async function (payload) {
+  const res = await fetch(`${API_BASE}/cursos`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await extractError(res));
+  return res.json();
+};
+api.actualizarCurso = async function (idCurso, payload) {
+  const res = await fetch(`${API_BASE}/cursos/${idCurso}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await extractError(res));
+  return res.json();
+};
+api.eliminarCurso = async function (idCurso) {
+  const res = await fetch(`${API_BASE}/cursos/${idCurso}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await extractError(res));
+  return res.json();
+};
+
+function buildHorariosInputs(cursoData = null) {
+  domModalCurso.horariosBody.innerHTML = DIAS_SEMANA_MODAL.map(({ key, label }) => {
+    const val = (campo) => {
+      const v = cursoData?.[campo];
+      return v ? String(v).slice(0, 5) : "";
+    };
+    return `
+      <tr class="border-b border-panel-edge/40">
+        <td class="px-3 py-2 font-medium text-paper text-xs w-24">${label}</td>
+        <td class="px-2 py-1.5">
+          <input type="time" id="h_em_${key}" value="${val(`hora_entrada_maniana_${key}`)}"
+            class="w-full bg-panel-1 border border-panel-edge rounded px-2 py-1 text-xs text-paper font-mono focus:outline-none focus:ring-1 focus:ring-ink-500/40" />
+        </td>
+        <td class="px-2 py-1.5">
+          <input type="time" id="h_sm_${key}" value="${val(`hora_salida_maniana_${key}`)}"
+            class="w-full bg-panel-1 border border-panel-edge rounded px-2 py-1 text-xs text-paper font-mono focus:outline-none focus:ring-1 focus:ring-ink-500/40" />
+        </td>
+        <td class="px-2 py-1.5">
+          <input type="time" id="h_et_${key}" value="${val(`hora_entrada_tarde_${key}`)}"
+            class="w-full bg-panel-1 border border-panel-edge rounded px-2 py-1 text-xs text-paper font-mono focus:outline-none focus:ring-1 focus:ring-ink-500/40" />
+        </td>
+        <td class="px-2 py-1.5">
+          <input type="time" id="h_st_${key}" value="${val(`hora_salida_tarde_${key}`)}"
+            class="w-full bg-panel-1 border border-panel-edge rounded px-2 py-1 text-xs text-paper font-mono focus:outline-none focus:ring-1 focus:ring-ink-500/40" />
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function recogerHorarios() {
+  const payload = {};
+  DIAS_SEMANA_MODAL.forEach(({ key }) => {
+    const em = document.getElementById(`h_em_${key}`)?.value || null;
+    const sm = document.getElementById(`h_sm_${key}`)?.value || null;
+    const et = document.getElementById(`h_et_${key}`)?.value || null;
+    const st = document.getElementById(`h_st_${key}`)?.value || null;
+    payload[`hora_entrada_maniana_${key}`] = em ? `${em}:00` : null;
+    payload[`hora_salida_maniana_${key}`]  = sm ? `${sm}:00` : null;
+    payload[`hora_entrada_tarde_${key}`]   = et ? `${et}:00` : null;
+    payload[`hora_salida_tarde_${key}`]    = st ? `${st}:00` : null;
+  });
+  return payload;
+}
+
+async function abrirModalCurso(idCurso = null) {
+  stateCursosModal.cursoEnEdicion = idCurso;
+
+  if (idCurso === null) {
+    // Nuevo curso: sugerir el siguiente ID disponible
+    const maxId = state.cursos.length > 0
+      ? Math.max(...state.cursos.map((c) => c.id_curso))
+      : 0;
+    domModalCurso.eyebrow.textContent = "Alta de curso";
+    domModalCurso.titulo.textContent = "Nuevo curso";
+    domModalCurso.id.value = maxId + 1;
+    domModalCurso.id.disabled = false;
+    domModalCurso.anio.value = "1";
+    domModalCurso.division.value = "";
+    buildHorariosInputs(null);
+  } else {
+    domModalCurso.eyebrow.textContent = "Edición de curso";
+    domModalCurso.titulo.textContent = "Cargando…";
+    domModalCurso.id.value = idCurso;
+    domModalCurso.id.disabled = true;
+    buildHorariosInputs(null);
+    toggleModal(domModalCurso.modal, true);
+    try {
+      const curso = await api.cursoDetalle(idCurso);
+      domModalCurso.titulo.textContent = `${curso.anio}° "${curso.division}"`;
+      domModalCurso.anio.value = curso.anio;
+      domModalCurso.division.value = curso.division;
+      buildHorariosInputs(curso);
+    } catch (err) {
+      showToast("No se pudo cargar el curso", "error");
+      toggleModal(domModalCurso.modal, false);
+      return;
+    }
+  }
+
+  toggleModal(domModalCurso.modal, true);
+}
+
+domModalCurso.btnCancelar.addEventListener("click", () => toggleModal(domModalCurso.modal, false));
+domModalCurso.modal.addEventListener("click", (e) => { if (e.target === domModalCurso.modal) toggleModal(domModalCurso.modal, false); });
+
+domModalCurso.btnGuardar.addEventListener("click", async () => {
+  const esEdicion = stateCursosModal.cursoEnEdicion !== null;
+  const idCurso = Number(domModalCurso.id.value);
+  const anio = Number(domModalCurso.anio.value);
+  const division = domModalCurso.division.value.trim().toUpperCase();
+
+  if (!idCurso || !anio || !division) {
+    showToast("Completá ID, año y división", "error"); return;
+  }
+
+  const horarios = recogerHorarios();
+  const payload = { id_curso: idCurso, anio, division, ...horarios };
+
+  setButtonLoading(domModalCurso.btnGuardar, domModalCurso.btnGuardarText, true, esEdicion ? "Guardando…" : "Creando…");
+
+  try {
+    if (esEdicion) {
+      await api.actualizarCurso(idCurso, { anio, division, ...horarios });
+      showToast("Curso actualizado correctamente", "success");
+    } else {
+      await api.crearCurso(payload);
+      showToast("Curso creado correctamente", "success");
+    }
+    toggleModal(domModalCurso.modal, false);
+    // Invalidar cache y recargar
+    state.cursos = [];
+    state.cursosModulo.cargado = false;
+    await cargarListadoCursos();
+    // También refrescar el select de cursos en filtros
+    await cargarCursos();
+  } catch (err) {
+    showToast(err.message || "No se pudo guardar el curso", "error");
+  } finally {
+    setButtonLoading(domModalCurso.btnGuardar, domModalCurso.btnGuardarText, false, "Guardar curso");
+  }
+});
+
+// Botón "Nuevo curso" en la vista de cursos
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#btn-curso-nuevo-vista")) abrirModalCurso(null);
+});
+
+function abrirModalBorrarCurso(idCurso, nombre) {
+  stateCursosModal.cursoABorrar = idCurso;
+  domModalCurso.borrarNombre.textContent = nombre;
+  toggleModal(domModalCurso.modalBorrar, true);
+}
+
+domModalCurso.btnBorrarCancelar.addEventListener("click", () => toggleModal(domModalCurso.modalBorrar, false));
+domModalCurso.modalBorrar.addEventListener("click", (e) => { if (e.target === domModalCurso.modalBorrar) toggleModal(domModalCurso.modalBorrar, false); });
+
+domModalCurso.btnBorrarConfirmar.addEventListener("click", async () => {
+  const idCurso = stateCursosModal.cursoABorrar;
+  if (!idCurso) return;
+  setButtonLoading(domModalCurso.btnBorrarConfirmar, domModalCurso.btnBorrarConfirmar, true, "Eliminando…");
+  try {
+    await api.eliminarCurso(idCurso);
+    showToast("Curso eliminado correctamente", "success");
+    toggleModal(domModalCurso.modalBorrar, false);
+    state.cursos = [];
+    state.cursosModulo.cargado = false;
+    await cargarListadoCursos();
+    await cargarCursos();
+  } catch (err) {
+    showToast(err.message || "No se pudo eliminar el curso", "error");
+  } finally {
+    setButtonLoading(domModalCurso.btnBorrarConfirmar, domModalCurso.btnBorrarConfirmar, false, "Sí, eliminar");
+  }
+});
+
+// Botón Nuevo Curso en header de la lista
+// Lo agregamos dinámicamente porque la vista ya existe
+(function agregarBtnNuevoCurso() {
+  const wrap = document.querySelector("#cursos-listado-wrap .px-5.py-4.border-b");
+  if (!wrap) return;
+  const btn = document.createElement("button");
+  btn.id = "btn-curso-nuevo-vista";
+  btn.className = "font-display font-semibold text-sm border border-panel-edge hover:border-ink-500 text-paper px-4 py-2 rounded-lg transition-colors flex items-center gap-2";
+  btn.innerHTML = `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round"/></svg> Nuevo curso`;
+  btn.addEventListener("click", () => abrirModalCurso(null));
+  wrap.appendChild(btn);
+})();
+
+// =====================================================================
+// MÓDULO: EXCEPCIONES DE CALENDARIO
+// =====================================================================
+const domExcepciones = {
+  tablaBody:   document.getElementById("excepciones-tabla-body"),
+  resumen:     document.getElementById("excepciones-resumen"),
+  btnNueva:    document.getElementById("btn-excepcion-nueva"),
+  // modal crear
+  modal:       document.getElementById("modal-excepcion"),
+  fecha:       document.getElementById("excepcion-fecha"),
+  alcance:     document.getElementById("excepcion-alcance"),
+  cursoWrap:   document.getElementById("excepcion-curso-wrap"),
+  curso:       document.getElementById("excepcion-curso"),
+  motivo:      document.getElementById("excepcion-motivo"),
+  btnCancelar: document.getElementById("btn-excepcion-cancelar"),
+  btnGuardar:  document.getElementById("btn-excepcion-guardar"),
+  btnGuardarText: document.getElementById("btn-excepcion-guardar-text"),
+  // modal borrar
+  modalBorrar:       document.getElementById("modal-excepcion-borrar"),
+  borrarDetalle:     document.getElementById("excepcion-borrar-detalle"),
+  btnBorrarCancelar: document.getElementById("btn-excepcion-borrar-cancelar"),
+  btnBorrarConfirmar: document.getElementById("btn-excepcion-borrar-confirmar"),
+};
+
+// API methods para excepciones
+api.excepciones = async function () {
+  const res = await fetch(`${API_BASE}/excepciones`);
+  if (!res.ok) throw new Error(await extractError(res));
+  return res.json();
+};
+api.crearExcepcion = async function (payload) {
+  const res = await fetch(`${API_BASE}/excepciones`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await extractError(res));
+  return res.json();
+};
+api.eliminarExcepcion = async function (id) {
+  const res = await fetch(`${API_BASE}/excepciones/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await extractError(res));
+  return res.json();
+};
+
+async function cargarExcepciones() {
+  domExcepciones.tablaBody.innerHTML = `<tr><td colspan="5" class="px-5 py-10 text-center text-paper-dim font-mono text-sm">Cargando excepciones…</td></tr>`;
+  try {
+    const lista = await api.excepciones();
+    stateExcepciones.lista = lista;
+    stateExcepciones.cargado = true;
+    renderExcepciones(lista);
+    setApiStatus(true);
+  } catch (err) {
+    domExcepciones.tablaBody.innerHTML = `<tr><td colspan="5" class="px-5 py-10 text-center text-stamp-red font-mono text-sm">No se pudieron cargar las excepciones</td></tr>`;
+    showToast("No se pudieron cargar las excepciones", "error");
+    setApiStatus(false);
+  }
+}
+
+function renderExcepciones(lista) {
+  domExcepciones.resumen.textContent = `${lista.length} excepción${lista.length === 1 ? "" : "es"}`;
+
+  if (lista.length === 0) {
+    domExcepciones.tablaBody.innerHTML = `<tr><td colspan="5" class="px-5 py-10 text-center text-paper-dim font-mono text-sm">No hay excepciones cargadas</td></tr>`;
+    return;
+  }
+
+  // Ordenar por fecha descendente (más reciente primero)
+  const ordenadas = [...lista].sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+  domExcepciones.tablaBody.innerHTML = ordenadas.map((exc) => {
+    const alcanceBadge = exc.tipo_alcance === "GLOBAL"
+      ? `<span class="font-mono text-[0.7rem] px-2 py-0.5 rounded-full bg-stamp-amberbg text-stamp-amber">GLOBAL</span>`
+      : `<span class="font-mono text-[0.7rem] px-2 py-0.5 rounded-full bg-panel-edge text-paper-dim">CURSO</span>`;
+
+    const cursoLabel = (() => {
+      if (exc.tipo_alcance === "GLOBAL") return `<span class="text-paper-dim">—</span>`;
+      const curso = state.cursos.find((c) => c.id_curso === exc.id_curso);
+      return curso ? `${curso.anio}° "${curso.division}"` : `ID ${exc.id_curso}`;
+    })();
+
+    return `
+      <tr class="hover:bg-white/[0.02] transition-colors">
+        <td class="px-5 py-3 font-mono text-paper-dim">${exc.fecha}</td>
+        <td class="px-5 py-3 text-paper">${escapeHtml(exc.motivo)}</td>
+        <td class="px-5 py-3">${alcanceBadge}</td>
+        <td class="px-5 py-3 text-paper-dim text-sm">${cursoLabel}</td>
+        <td class="px-5 py-3 text-right">
+          <button class="btn-excepcion-borrar font-mono text-xs font-medium px-3 py-1.5 rounded-md border border-panel-edge text-stamp-red hover:text-stamp-red/80 transition-colors"
+            data-id="${exc.id_excepcion}" data-detalle="${escapeHtml(exc.fecha)} — ${escapeHtml(exc.motivo)}">
+            Eliminar
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  domExcepciones.tablaBody.querySelectorAll(".btn-excepcion-borrar").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      stateExcepciones.itemABorrar = Number(btn.dataset.id);
+      domExcepciones.borrarDetalle.textContent = btn.dataset.detalle;
+      toggleModal(domExcepciones.modalBorrar, true);
+    });
+  });
+}
+
+// Modal nueva excepción
+domExcepciones.btnNueva.addEventListener("click", () => {
+  domExcepciones.fecha.value = "";
+  domExcepciones.alcance.value = "GLOBAL";
+  domExcepciones.motivo.value = "";
+  domExcepciones.cursoWrap.classList.add("hidden");
+  // Poblar select de cursos
+  const opciones = state.cursos.map((c) => `<option value="${c.id_curso}">${c.anio}° "${c.division}"</option>`).join("");
+  domExcepciones.curso.innerHTML = opciones || '<option value="">No hay cursos</option>';
+  toggleModal(domExcepciones.modal, true);
+});
+
+domExcepciones.alcance.addEventListener("change", () => {
+  domExcepciones.cursoWrap.classList.toggle("hidden", domExcepciones.alcance.value !== "CURSO");
+});
+
+domExcepciones.btnCancelar.addEventListener("click", () => toggleModal(domExcepciones.modal, false));
+domExcepciones.modal.addEventListener("click", (e) => { if (e.target === domExcepciones.modal) toggleModal(domExcepciones.modal, false); });
+
+domExcepciones.btnGuardar.addEventListener("click", async () => {
+  const fecha = domExcepciones.fecha.value;
+  const motivo = domExcepciones.motivo.value.trim();
+  const tipo_alcance = domExcepciones.alcance.value;
+  const id_curso = tipo_alcance === "CURSO" ? Number(domExcepciones.curso.value) || null : null;
+
+  if (!fecha) { showToast("Seleccioná una fecha", "error"); return; }
+  if (!motivo) { showToast("Escribí el motivo", "error"); return; }
+  if (tipo_alcance === "CURSO" && !id_curso) { showToast("Seleccioná el curso afectado", "error"); return; }
+
+  setButtonLoading(domExcepciones.btnGuardar, domExcepciones.btnGuardarText, true, "Guardando…");
+
+  try {
+    await api.crearExcepcion({ fecha, motivo, tipo_alcance, id_curso });
+    showToast("Excepción agregada correctamente", "success");
+    toggleModal(domExcepciones.modal, false);
+    stateExcepciones.cargado = false;
+    await cargarExcepciones();
+  } catch (err) {
+    showToast(err.message || "No se pudo agregar la excepción", "error");
+  } finally {
+    setButtonLoading(domExcepciones.btnGuardar, domExcepciones.btnGuardarText, false, "Agregar excepción");
+  }
+});
+
+// Modal borrar excepción
+domExcepciones.btnBorrarCancelar.addEventListener("click", () => toggleModal(domExcepciones.modalBorrar, false));
+domExcepciones.modalBorrar.addEventListener("click", (e) => { if (e.target === domExcepciones.modalBorrar) toggleModal(domExcepciones.modalBorrar, false); });
+
+domExcepciones.btnBorrarConfirmar.addEventListener("click", async () => {
+  const id = stateExcepciones.itemABorrar;
+  if (!id) return;
+  setButtonLoading(domExcepciones.btnBorrarConfirmar, domExcepciones.btnBorrarConfirmar, true, "Eliminando…");
+  try {
+    await api.eliminarExcepcion(id);
+    showToast("Excepción eliminada correctamente", "success");
+    toggleModal(domExcepciones.modalBorrar, false);
+    stateExcepciones.cargado = false;
+    await cargarExcepciones();
+  } catch (err) {
+    showToast(err.message || "No se pudo eliminar la excepción", "error");
+  } finally {
+    setButtonLoading(domExcepciones.btnBorrarConfirmar, domExcepciones.btnBorrarConfirmar, false, "Sí, eliminar");
+  }
+});
+
+// =====================================================================
 // AUTO-REFRESH (Dashboard)
 // =====================================================================
 // El escáner ficha asistencias en segundo plano sin avisarle al dashboard
@@ -1358,6 +1777,10 @@ function hayModalAbierto() {
     domAlumnos.modal,
     domAlumnos.modalBorrar,
     domAlumnos.modalPromedio,
+    domModalCurso.modal,
+    domModalCurso.modalBorrar,
+    domExcepciones.modal,
+    domExcepciones.modalBorrar,
   ];
   return modales.some((modal) => modal && !modal.classList.contains("hidden"));
 }

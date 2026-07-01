@@ -66,6 +66,10 @@
         <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19.5V6a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v13" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 19.5h12" stroke-linecap="round"/><path d="M4 19.5A2 2 0 0 1 6 17.5" stroke-linecap="round"/></svg>
         Cursos
       </a>
+      <a href="#" data-module="excepciones" class="sidebar-link flex items-center gap-3 px-6 py-2.5 border-l-2 border-transparent text-sm font-medium text-paper-dim hover:text-paper hover:bg-white/[0.03] transition-colors">
+        <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke-linecap="round"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01" stroke-linecap="round" stroke-width="2"/></svg>
+        Calendario
+      </a>
     </nav>
 
     <div class="px-6 py-4 border-t border-panel-edge">
@@ -368,6 +372,51 @@
       </div>
       <!-- ============ /VISTA: CURSOS ============ -->
 
+      <!-- ============ VISTA: EXCEPCIONES DE CALENDARIO ============ -->
+      <div id="vista-excepciones" class="hidden space-y-6">
+
+        <!-- Barra de acciones -->
+        <section class="bg-panel-2 border border-panel-edge rounded-xl px-5 py-4">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p class="font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1">Excepciones cargadas</p>
+              <p class="font-mono text-xs text-paper-dim" id="excepciones-resumen">—</p>
+            </div>
+            <button id="btn-excepcion-nueva"
+              class="font-display font-semibold text-sm border border-panel-edge hover:border-ink-500 text-paper px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round"/></svg>
+              Nueva excepción
+            </button>
+          </div>
+        </section>
+
+        <!-- Tabla -->
+        <section class="bg-panel-2 border border-panel-edge rounded-xl overflow-hidden">
+          <div class="px-5 py-4 border-b border-panel-edge">
+            <h2 class="font-display font-semibold text-paper">Feriados y días no lectivos</h2>
+            <p class="font-mono text-xs text-paper-dim mt-0.5">Fechas en las que el sistema no registra asistencias</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left font-mono text-[0.68rem] tracking-widest text-paper-dim uppercase border-b border-panel-edge">
+                  <th class="px-5 py-3">Fecha</th>
+                  <th class="px-5 py-3">Motivo</th>
+                  <th class="px-5 py-3">Alcance</th>
+                  <th class="px-5 py-3">Curso</th>
+                  <th class="px-5 py-3 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="excepciones-tabla-body" class="divide-y divide-panel-edge/60">
+                <tr><td colspan="5" class="px-5 py-10 text-center text-paper-dim font-mono text-sm">Cargando excepciones…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      </div>
+      <!-- ============ /VISTA: EXCEPCIONES ============ -->
+
     </div>
   </main>
 </div>
@@ -611,6 +660,149 @@
       <button id="btn-cerrar-turno-cancelar" class="font-display font-medium text-sm text-paper-dim hover:text-paper px-4 py-2 rounded-lg transition-colors">Cancelar</button>
       <button id="btn-cerrar-turno-confirmar" class="font-display font-semibold text-sm bg-stamp-red hover:bg-stamp-red/90 text-paper px-5 py-2 rounded-lg transition-colors">
         Sí, cerrar turno
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: CURSO (CREAR / EDITAR) ============ -->
+<div id="modal-curso" class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4 py-8 overflow-y-auto">
+  <div class="bg-panel-2 border border-panel-edge rounded-2xl w-full max-w-3xl shadow-2xl my-auto">
+    <div class="px-6 py-5 border-b border-panel-edge">
+      <p class="font-mono text-[0.65rem] tracking-widest text-ink-500 uppercase mb-1" id="modal-curso-eyebrow">Alta de curso</p>
+      <h3 class="font-display font-bold text-lg text-paper" id="modal-curso-titulo">Nuevo curso</h3>
+    </div>
+    <div class="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
+      <!-- Datos básicos -->
+      <div class="grid grid-cols-3 gap-4">
+        <div>
+          <label for="curso-id" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">ID Curso</label>
+          <input type="number" id="curso-id" min="1" placeholder="Ej: 26"
+            class="w-full bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper font-mono placeholder:text-paper-dim/60 focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500" />
+        </div>
+        <div>
+          <label for="curso-anio" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">Año</label>
+          <select id="curso-anio" class="w-full bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500">
+            <option value="1">1°</option><option value="2">2°</option><option value="3">3°</option>
+            <option value="4">4°</option><option value="5">5°</option><option value="6">6°</option>
+          </select>
+        </div>
+        <div>
+          <label for="curso-division" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">División</label>
+          <input type="text" id="curso-division" maxlength="1" placeholder="A"
+            class="w-full bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper font-mono uppercase placeholder:text-paper-dim/60 focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500" />
+        </div>
+      </div>
+      <!-- Horarios -->
+      <div>
+        <p class="font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-3">Horarios semanales (dejá vacío si no hay clases ese día/turno)</p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-left font-mono text-[0.62rem] tracking-widest text-paper-dim uppercase border-b border-panel-edge">
+                <th class="px-3 py-2 w-24">Día</th>
+                <th class="px-3 py-2">Entrada mañana</th>
+                <th class="px-3 py-2">Salida mañana</th>
+                <th class="px-3 py-2">Entrada tarde</th>
+                <th class="px-3 py-2">Salida tarde</th>
+              </tr>
+            </thead>
+            <tbody id="curso-horarios-inputs" class="divide-y divide-panel-edge/60">
+              <!-- Generado por JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="px-6 py-4 border-t border-panel-edge flex justify-end gap-3">
+      <button id="btn-curso-cancelar" class="font-display font-medium text-sm text-paper-dim hover:text-paper px-4 py-2 rounded-lg transition-colors">Cancelar</button>
+      <button id="btn-curso-guardar" class="font-display font-semibold text-sm bg-ink-500 hover:bg-ink-600 text-panel-0 px-5 py-2 rounded-lg transition-colors">
+        <span id="btn-curso-guardar-text">Guardar curso</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: CONFIRMAR BORRADO DE CURSO ============ -->
+<div id="modal-curso-borrar" class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
+  <div class="bg-panel-2 border border-panel-edge rounded-2xl w-full max-w-sm shadow-2xl">
+    <div class="px-6 py-5">
+      <div class="w-11 h-11 rounded-full bg-stamp-red/10 flex items-center justify-center mb-4">
+        <svg class="w-5 h-5 text-stamp-red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3 class="font-display font-bold text-lg text-paper mb-2">¿Eliminar el curso <span id="curso-borrar-nombre"></span>?</h3>
+      <p class="text-sm text-paper-dim leading-relaxed">
+        Solo se puede eliminar si no tiene alumnos asignados. Las asistencias históricas de ese curso permanecerán en la base de datos.
+      </p>
+    </div>
+    <div class="px-6 py-4 border-t border-panel-edge flex justify-end gap-3">
+      <button id="btn-curso-borrar-cancelar" class="font-display font-medium text-sm text-paper-dim hover:text-paper px-4 py-2 rounded-lg transition-colors">Cancelar</button>
+      <button id="btn-curso-borrar-confirmar" class="font-display font-semibold text-sm bg-stamp-red hover:bg-stamp-red/90 text-paper px-5 py-2 rounded-lg transition-colors">
+        Sí, eliminar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: EXCEPCIÓN DE CALENDARIO ============ -->
+<div id="modal-excepcion" class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
+  <div class="bg-panel-2 border border-panel-edge rounded-2xl w-full max-w-md shadow-2xl">
+    <div class="px-6 py-5 border-b border-panel-edge">
+      <p class="font-mono text-[0.65rem] tracking-widest text-ink-500 uppercase mb-1">Calendario escolar</p>
+      <h3 class="font-display font-bold text-lg text-paper">Nueva excepción</h3>
+    </div>
+    <div class="px-6 py-5 space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label for="excepcion-fecha" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">Fecha</label>
+          <input type="date" id="excepcion-fecha"
+            class="w-full bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper font-mono focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500" />
+        </div>
+        <div>
+          <label for="excepcion-alcance" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">Alcance</label>
+          <select id="excepcion-alcance"
+            class="w-full bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500">
+            <option value="GLOBAL">Global (toda la escuela)</option>
+            <option value="CURSO">Curso específico</option>
+          </select>
+        </div>
+      </div>
+      <div id="excepcion-curso-wrap" class="hidden">
+        <label for="excepcion-curso" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">Curso afectado</label>
+        <select id="excepcion-curso"
+          class="w-full bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500">
+          <option value="">Cargando cursos…</option>
+        </select>
+      </div>
+      <div>
+        <label for="excepcion-motivo" class="block font-mono text-[0.65rem] tracking-widest text-paper-dim uppercase mb-1.5">Motivo</label>
+        <input type="text" id="excepcion-motivo" placeholder="Ej: Feriado Nacional, Día del Estudiante…"
+          class="w-full bg-panel-1 border border-panel-edge rounded-lg px-3 py-2 text-sm text-paper placeholder:text-paper-dim/60 focus:outline-none focus:ring-2 focus:ring-ink-500/40 focus:border-ink-500" />
+      </div>
+    </div>
+    <div class="px-6 py-4 border-t border-panel-edge flex justify-end gap-3">
+      <button id="btn-excepcion-cancelar" class="font-display font-medium text-sm text-paper-dim hover:text-paper px-4 py-2 rounded-lg transition-colors">Cancelar</button>
+      <button id="btn-excepcion-guardar" class="font-display font-semibold text-sm bg-ink-500 hover:bg-ink-600 text-panel-0 px-5 py-2 rounded-lg transition-colors">
+        <span id="btn-excepcion-guardar-text">Agregar excepción</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: CONFIRMAR BORRADO DE EXCEPCIÓN ============ -->
+<div id="modal-excepcion-borrar" class="hidden fixed inset-0 z-40 modal-backdrop bg-black/60 flex items-center justify-center px-4">
+  <div class="bg-panel-2 border border-panel-edge rounded-2xl w-full max-w-sm shadow-2xl">
+    <div class="px-6 py-5">
+      <div class="w-11 h-11 rounded-full bg-stamp-red/10 flex items-center justify-center mb-4">
+        <svg class="w-5 h-5 text-stamp-red" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3 class="font-display font-bold text-lg text-paper mb-2">¿Eliminar esta excepción?</h3>
+      <p class="text-sm text-paper-dim" id="excepcion-borrar-detalle">—</p>
+    </div>
+    <div class="px-6 py-4 border-t border-panel-edge flex justify-end gap-3">
+      <button id="btn-excepcion-borrar-cancelar" class="font-display font-medium text-sm text-paper-dim hover:text-paper px-4 py-2 rounded-lg transition-colors">Cancelar</button>
+      <button id="btn-excepcion-borrar-confirmar" class="font-display font-semibold text-sm bg-stamp-red hover:bg-stamp-red/90 text-paper px-5 py-2 rounded-lg transition-colors">
+        Sí, eliminar
       </button>
     </div>
   </div>
